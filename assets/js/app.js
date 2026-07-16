@@ -186,7 +186,7 @@
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + totalW + '" height="' + totalH +
       '" viewBox="0 0 ' + totalW + ' ' + totalH + '" font-family="' + G.fontStack() +
-      '">' + body + '</svg>';
+      '" text-rendering="optimizeLegibility" shape-rendering="geometricPrecision">' + body + '</svg>';
 
     return { svg: svg, width: totalW, height: totalH, theme: th };
   }
@@ -258,8 +258,8 @@
 
         // Today ring
         if (state.highlightToday && key === tKey) {
-          s += '<rect x="' + (cx + 1.5) + '" y="' + (cy + 1.5) + '" width="' + (G.cellW - 3) +
-            '" height="' + (G.cellH - 3) + '" rx="4" fill="none" stroke="' + th.today + '" stroke-width="1.6"/>';
+          s += '<rect x="' + r2(cx + 1.5) + '" y="' + r2(cy + 1.5) + '" width="' + r2(G.cellW - 3) +
+            '" height="' + r2(G.cellH - 3) + '" rx="4" fill="none" stroke="' + th.today + '" stroke-width="1.6"/>';
         }
 
         // Colour band(s) at bottom
@@ -273,7 +273,7 @@
           const n = Math.min(cats.length, 4);
           const stripeW = bw / n;
           for (let j = 0; j < n; j++) {
-            s += '<rect x="' + (bx + j * stripeW) + '" y="' + by + '" width="' + (stripeW - (j < n - 1 ? 1 : 0)) +
+            s += '<rect x="' + r2(bx + j * stripeW) + '" y="' + r2(by) + '" width="' + r2(stripeW - (j < n - 1 ? 1 : 0)) +
               '" height="' + bandH + '" rx="1.5" fill="' + cats[j].color + '"/>';
           }
 
@@ -319,15 +319,15 @@
     const legendTop = G.margin + headerHeight() + gridHeight() + 30;
     let svg = '';
     // Divider line above legend
-    svg += '<line x1="' + G.margin + '" y1="' + (legendTop - 14) + '" x2="' + (G.margin + availW) +
-      '" y2="' + (legendTop - 14) + '" stroke="' + th.line + '" stroke-width="1"/>';
+    svg += '<line x1="' + r2(G.margin) + '" y1="' + r2(legendTop - 14) + '" x2="' + r2(G.margin + availW) +
+      '" y2="' + r2(legendTop - 14) + '" stroke="' + th.line + '" stroke-width="1"/>';
 
     rows.forEach((rowItems, ri) => {
       const rowW = rowItems.reduce((a, it) => a + it.w, 0) - gapX;
       let x = G.margin + (availW - rowW) / 2;
       const y = legendTop + ri * itemH;
       rowItems.forEach((it) => {
-        svg += '<rect x="' + x + '" y="' + (y + 2) + '" width="' + sw + '" height="' + sw + '" rx="3" fill="' + it.c.color + '"/>';
+        svg += '<rect x="' + r2(x) + '" y="' + r2(y + 2) + '" width="' + sw + '" height="' + sw + '" rx="3" fill="' + it.c.color + '"/>';
         svg += text(x + sw + textPad, y + 13, esc(it.c.label || 'Untitled'), th.text, 12, 500, 'start');
         x += it.w;
       });
@@ -357,15 +357,16 @@
   }
 
   /* ---------- SVG primitives ---------- */
+  const r2 = (n) => Math.round(n * 100) / 100;
   function rect(x, y, w, h, fill, stroke, r, sw) {
-    let s = '<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '"';
+    let s = '<rect x="' + r2(x) + '" y="' + r2(y) + '" width="' + r2(w) + '" height="' + r2(h) + '"';
     if (r) s += ' rx="' + r + '"';
     if (fill) s += ' fill="' + fill + '"'; else s += ' fill="none"';
     if (stroke) s += ' stroke="' + stroke + '" stroke-width="' + (sw || 1) + '"';
     return s + '/>';
   }
   function text(x, y, str, fill, size, weight, anchor, opacity) {
-    return '<text x="' + x + '" y="' + y + '" fill="' + fill + '" font-size="' + size +
+    return '<text x="' + r2(x) + '" y="' + r2(y) + '" fill="' + fill + '" font-size="' + size +
       '" font-weight="' + weight + '" text-anchor="' + anchor + '"' +
       (opacity != null ? ' opacity="' + opacity + '"' : '') + '>' + str + '</text>';
   }
@@ -375,11 +376,22 @@
    * ========================================================================== */
   let currentBuild = null;
   let zoom = 1, autoFit = true;
+  let renderQueued = false;
 
+  // Coalesce rapid state changes (typing, colour dragging) into one paint per
+  // animation frame instead of rebuilding the whole SVG on every keystroke.
   function render() {
+    if (renderQueued) return;
+    renderQueued = true;
+    requestAnimationFrame(() => { renderQueued = false; renderNow(); });
+  }
+
+  // Force any pending render to run immediately (used before export).
+  function flush() { if (renderQueued) { renderQueued = false; renderNow(); } }
+
+  function renderNow() {
     currentBuild = buildCalendar();
-    const canvas = $('#preview-canvas');
-    canvas.innerHTML = currentBuild.svg;
+    $('#preview-canvas').innerHTML = currentBuild.svg;
     applyZoom();
     updateDims();
     save();
@@ -455,6 +467,7 @@
   }
 
   async function doExport() {
+    flush();
     const fmt = $('#x-format').value;
     if (fmt === 'svg') {
       downloadBlob(new Blob([svgString()], { type: 'image/svg+xml;charset=utf-8' }), safeName() + '.svg');
@@ -477,7 +490,6 @@
    * UI WIRING
    * ========================================================================== */
   function $(sel) { return document.querySelector(sel); }
-  function $all(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
 
   function populateSelects() {
     const sm = $('#c-start-month');
@@ -598,6 +610,9 @@
 
     // Add event
     $('#btn-add-event').addEventListener('click', addEvent);
+    ['#e-name', '#e-start', '#e-end'].forEach((sel) => {
+      $(sel).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addEvent(); } });
+    });
 
     // Export controls
     $('#x-format').addEventListener('change', () => {
@@ -660,8 +675,7 @@
     toast('Event added');
   }
 
-  async function copySvg() {
-    try {
+  async function copySvg() {    flush();    try {
       await navigator.clipboard.writeText(svgString());
       toast('SVG markup copied');
     } catch (e) {
@@ -708,8 +722,7 @@
     populateSelects();
     syncInputsFromState();
     bind();
-    // ensure uid doesn't collide with loaded ids
-    render();
+    renderNow();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
