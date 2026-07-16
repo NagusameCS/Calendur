@@ -805,6 +805,43 @@
     }
   }
 
+  /* ---------- Embed code generator ---------- */
+  function copyEmbedCode() {
+    flush();
+    const params = new URLSearchParams();
+    params.set('embed', '1');
+    params.set('theme', state.theme);
+    params.set('year', state.year);
+    params.set('months', state.months);
+    params.set('start', state.startMonth);
+    if (state.title) params.set('title', state.title);
+    if (state.subtitle) params.set('subtitle', state.subtitle);
+    if (!state.showBorders) params.set('borders', '0');
+    if (state.showWatermark) params.set('watermark', '1');
+    if (state.fontScale !== 1) params.set('fontscale', state.fontScale);
+    if (state.weekStart) params.set('weekstart', '1');
+    if (state.dayAlign !== 'start') params.set('dayalign', state.dayAlign);
+
+    // Encode events + categories as compact JSON in the URL hash
+    const cfg = { categories: state.categories, events: state.events, notes: state.notes };
+    const json = JSON.stringify(cfg);
+    if (state.events.length > 0 || state.categories.length > 4 || (state.notes || '').trim()) {
+      try {
+        const encoded = btoa(unescape(encodeURIComponent(json)));
+        params.set('cfg', encoded);
+      } catch (e) { /* skip if too large */ }
+    }
+
+    const embedUrl = 'https://nagusamecs.github.io/Calendur/?' + params.toString();
+    const iframeCode = '<iframe src="' + embedUrl + '" style="width:100%;height:600px;border:none;border-radius:8px;" title="Calendur calendar" loading="lazy" allowfullscreen></iframe>';
+
+    navigator.clipboard.writeText(iframeCode).then(() => {
+      toast('Embed code copied! Paste into your HTML.');
+    }).catch(() => {
+      prompt('Copy this embed code:', iframeCode);
+    });
+  }
+
   function loadFromHash() {
     try {
       const hash = location.hash;
@@ -1261,6 +1298,7 @@
     $('#btn-copy-svg').addEventListener('click', copySvg);
     $('#btn-print').addEventListener('click', printPdf);
     $('#btn-share').addEventListener('click', shareUrl);
+    $('#btn-embed').addEventListener('click', copyEmbedCode);
 
     // Day alignment
     $('#c-dayalign').addEventListener('change', (e) => { state.dayAlign = e.target.value; render(); });
@@ -1400,6 +1438,8 @@
     linkDateFields();
     // If view-only mode, hide controls
     if (isViewOnly()) enterViewOnly();
+    // If embed mode, strip everything but the calendar
+    if (getParam('embed') === '1') enterEmbedMode();
     renderNow();
     // Auto-download if ?auto=1 is set
     if (getParam('auto') === '1') {
@@ -1439,7 +1479,18 @@
     if (p('borders'))    state.showBorders = p('borders') !== '0';
     if (p('watermark'))  state.showWatermark = p('watermark') === '1';
     if (p('today'))      state.highlightToday = p('today') === '1';
+    if (p('dayalign'))   state.dayAlign = p('dayalign');
     if (p('view'))       {} // handled separately
+    // Load full config from ?cfg=base64json (used by embed URLs)
+    if (p('cfg')) {
+      try {
+        const json = decodeURIComponent(escape(atob(p('cfg'))));
+        const s = JSON.parse(json);
+        if (s && s.categories) state.categories = s.categories;
+        if (s && s.events) state.events = s.events;
+        if (s && s.notes != null) state.notes = s.notes;
+      } catch (e) { /* silently ignore bad cfg */ }
+    }
   }
 
   function getParam(name) {
@@ -1449,6 +1500,35 @@
 
   function isViewOnly() {
     return getParam('view') === '1';
+  }
+
+  function isEmbed() {
+    return getParam('embed') === '1';
+  }
+
+  function enterEmbedMode() {
+    // Hide everything except the calendar preview
+    const panel = document.querySelector('.panel');
+    const nav = document.querySelector('#navbar');
+    const bar = document.querySelector('.preview-bar');
+    if (panel) panel.style.display = 'none';
+    if (nav) nav.style.display = 'none';
+    if (bar) bar.style.display = 'none';
+    // Full viewport
+    const preview = document.querySelector('.preview');
+    const stage = document.querySelector('.preview-stage');
+    if (preview) { preview.style.height = '100vh'; preview.style.position = 'static'; }
+    if (stage) stage.style.padding = '0';
+    // Force interactive HTML view for embeds (richer UX)
+    state.interactiveView = true;
+    // Remove body margin/padding
+    document.body.style.margin = '0';
+    document.body.style.padding = '0';
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    // Remove the main grid layout
+    const app = document.querySelector('.app');
+    if (app) { app.style.display = 'block'; app.style.paddingTop = '0'; }
   }
 
   function enterViewOnly() {
