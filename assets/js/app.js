@@ -135,8 +135,36 @@
 
   function categoryById(id) { return state.categories.find((c) => c.id === id) || null; }
 
-  /* Events covering a given date key, in category order. */
+  /* Pre-compute event index: Map<dateKey, Event[]> for O(1) day lookups.
+   * This is rebuilt once per render instead of filtering events for every cell. */
+  let _eventIndex = null;
+  function buildEventIndex() {
+    _eventIndex = new Map();
+    state.events.forEach((ev) => {
+      // Expand the range into individual day keys
+      // WARNING: for multi-year ranges this could be expensive — cap at 1000 days
+      let s = ev.start, e = ev.end;
+      if (e < s) { const t = s; s = e; e = t; }
+      const startDate = new Date(s + 'T00:00:00Z');
+      const endDate = new Date(e + 'T00:00:00Z');
+      let count = 0;
+      for (let d = new Date(startDate); d <= endDate && count < 1000; d.setUTCDate(d.getUTCDate() + 1)) {
+        const key = ymd(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+        if (!_eventIndex.has(key)) _eventIndex.set(key, []);
+        _eventIndex.get(key).push(ev);
+        count++;
+      }
+    });
+    return _eventIndex;
+  }
+
+  /* Events covering a given date key — O(1) lookup from pre-built index. */
   function eventsOn(key) {
+    if (_eventIndex) {
+      const found = _eventIndex.get(key);
+      return found || [];
+    }
+    // Fallback to linear scan (shouldn't happen during render)
     return state.events.filter((e) => e.start <= key && key <= e.end);
   }
 
@@ -151,6 +179,8 @@
   function buildCalendar() {
     const th = THEMES[state.theme] || THEMES.noir;
     const months = Math.max(1, Math.min(36, state.months | 0));
+    // Pre-compute event index for O(1) lookups during cell rendering
+    buildEventIndex();
     let cols = state.columns === 'auto'
       ? Math.max(1, Math.min(4, Math.ceil(Math.sqrt(months * 1.3))))
       : Math.max(1, Math.min(6, parseInt(state.columns, 10)));
@@ -192,28 +222,29 @@
     const tKey = todayKey();
     const todayCol = state.highlightToday ? (state.todayColor || th.today) : th.today;
 
-    let body = '';
+    const body = [];
+    const p = body.push.bind(body);
     // Background
-    body += rect(0, 0, totalW, totalH, th.page, null, 0);
+    p(rect(0, 0, totalW, totalH, th.page, null, 0));
 
     // Interactive SVG: embed CSS for hover feedback + tooltips
     if (state.interactiveSvg !== false) {
-      body += '<style>' +
+      p('<style>' +
         '.ev-day:hover { filter: brightness(1.18); cursor: pointer; }' +
         '.ev-day:hover .ev-tint { opacity: 0.35; }' +
         '.ev-band-stripe:hover { filter: brightness(1.3); }' +
         '.ev-band-stripe { transition: filter 0.12s ease; }' +
         '.ev-day { transition: filter 0.12s ease; }' +
-        '</style>';
+        '</style>');
     }
 
     // Title / subtitle
     if (hasTitle) {
-      body += text(totalW / 2, g.margin + 30, esc(state.title), th.header, 30, 700, 'middle');
+      p(text(totalW / 2, g.margin + 30, esc(state.title), th.header, 30, 700, 'middle'));
     }
     if (hasSub) {
       const sy = g.margin + (hasTitle ? 60 : 26);
-      body += text(totalW / 2, sy, esc(state.subtitle), th.sub, 15, 500, 'middle');
+      p(text(totalW / 2, sy, esc(state.subtitle), th.sub, 15, 500, 'middle'));
     }
 
     // Month blocks
@@ -222,23 +253,23 @@
       const row = Math.floor(k / cols);
       const bx = g.margin + col * (blockW + g.gap);
       const by = gridTop + row * (blockH + g.gap);
-      body += buildMonth(bx, by, monthAt(k), th, wk, tKey, todayCol, g);
+      p(buildMonth(bx, by, monthAt(k), th, wk, tKey, todayCol, g));
     }
 
     // Legend
-    body += legend.svg;
+    p(legend.svg);
     // Notes
-    body += notesBlock.svg;
+    p(notesBlock.svg);
     // Watermark
     if (state.showWatermark) {
-      body += text(totalW - g.margin, totalH - g.margin + 4,
-        'Made with Calendur \u00b7 nagusamecs.github.io', th.muted, 9, 400, 'end', 0.45);
+      p(text(totalW - g.margin, totalH - g.margin + 4,
+        'Made with Calendur \u00b7 nagusamecs.github.io', th.muted, 9, 400, 'end', 0.45));
     }
 
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + totalW + '" height="' + totalH +
       '" viewBox="0 0 ' + totalW + ' ' + totalH + '" font-family="' + G.fontStack() +
-      '" text-rendering="optimizeLegibility" shape-rendering="geometricPrecision">' + body + '</svg>';
+      '" text-rendering="optimizeLegibility" shape-rendering="geometricPrecision">' + body.join('') + '</svg>';
 
     return { svg: svg, width: totalW, height: totalH, theme: th };
   }
@@ -249,6 +280,7 @@
   function buildHtmlCalendar() {
     const th = THEMES[state.theme] || THEMES.noir;
     const months = Math.max(1, Math.min(36, state.months | 0));
+    buildEventIndex();
     const tKey = todayKey();
     const wk = weekdayOrder();
     const todayCol = state.highlightToday ? (state.todayColor || th.today) : th.today;
@@ -396,26 +428,27 @@
 
   function buildMonth(x, y, ym, th, wk, tKey, todayCol, g) {
     const { y: yr, m } = ym;
-    let s = '';
+    const parts = [];
+    const push = parts.push.bind(parts);
     const innerX = x + g.monthPad;
     const innerY = y + g.monthPad;
     const innerW = 7 * g.cellW;
 
-    // Block background (no border if showBorders is off)
+    // Block background
     const borderStroke = state.showBorders ? th.line : null;
-    s += rect(x, y, innerW + g.monthPad * 2, g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2, th.month, borderStroke, 8);
+    push(rect(x, y, innerW + g.monthPad * 2, g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2, th.month, borderStroke, 8));
 
-    // Month name (append leap-year indicator for Feb in leap years)
+    // Month name
     let monthLabel = MONTHS[m] + ' ' + yr;
-    if (m === 1 && isLeapYear(yr)) monthLabel += ' \u22c8'; // ⋈ = leap year
-    s += text(x + (innerW + g.monthPad * 2) / 2, innerY + (g.monthHead * 0.66), esc(monthLabel), th.header, 15, 600, 'middle');
+    if (m === 1 && isLeapYear(yr)) monthLabel += ' \u22c8';
+    push(text(x + (innerW + g.monthPad * 2) / 2, innerY + (g.monthHead * 0.66), esc(monthLabel), th.header, 15, 600, 'middle'));
 
     // Weekday header
     const wRowY = innerY + g.monthHead;
     for (let i = 0; i < 7; i++) {
       const cx = innerX + i * g.cellW + g.cellW / 2;
       const isWknd = state.weekendDays && state.weekendDays.indexOf(wk[i]) !== -1;
-      s += text(cx, wRowY + (g.weekdayHead * 0.68), WEEKDAYS[wk[i]].toUpperCase().slice(0, 3), isWknd ? th.muted : th.sub, 9.5, 600, 'middle');
+      push(text(cx, wRowY + (g.weekdayHead * 0.68), WEEKDAYS[wk[i]].toUpperCase().slice(0, 3), isWknd ? th.muted : th.sub, 9.5, 600, 'middle'));
     }
 
     // Day grid
@@ -438,7 +471,6 @@
       let cellBg = th.month;
       if (inMonth && state.shadeWeekend && isWknd) cellBg = th.weekend;
 
-      // For interactive SVG mode: wrap event days in a <g> with a <title>
       const hasEvents = inMonth && eventsOn(ymd(yr, m, dayNum)).length > 0;
       if (hasEvents && state.interactiveSvg !== false) {
         const key = ymd(yr, m, dayNum);
@@ -450,68 +482,60 @@
             (c2 ? ' · ' + esc(c2.label) : '') +
             (e.description ? ' — ' + esc(e.description) : '');
         });
-        s += '<g class="ev-day"><title>' + tipParts.join('&#10;') + '</title>';
+        push('<g class="ev-day"><title>' + tipParts.join('&#10;') + '</title>');
       }
 
       // Cell background + border
-      s += rect(cx, cy, g.cellW, g.cellH, cellBg, borderStroke, 0, 0.6);
+      push(rect(cx, cy, g.cellW, g.cellH, cellBg, borderStroke, 0, 0.6));
 
       if (inMonth) {
         const key = ymd(yr, m, dayNum);
         const evs = eventsOn(key);
 
-        // Tint whole cell
+        // Tint
         if (evs.length) {
           const first = categoryById(evs[0].categoryId);
-          if (first) s += rect(cx + 0.6, cy + 0.6, g.cellW - 1.2, g.cellH - 1.2, withAlpha(first.color, 0.16), null, 0, 'class="ev-tint"');
+          if (first) push(rect(cx + 0.6, cy + 0.6, g.cellW - 1.2, g.cellH - 1.2, withAlpha(first.color, 0.16), null, 0, 'class="ev-tint"'));
         }
 
         // Day number
         const align = state.dayAlign || 'start';
         const numX = align === 'start' ? (cx + 6) : align === 'end' ? (cx + g.cellW - 6) : (cx + g.cellW / 2);
-        s += text(numX, cy + 15, dayNum, th.text, 12, 500, align);
+        push(text(numX, cy + 15, dayNum, th.text, 12, 500, align));
 
         // Today ring
         if (state.highlightToday && key === tKey) {
-          s += '<rect x="' + r2(cx + 1.5) + '" y="' + r2(cy + 1.5) + '" width="' + r2(g.cellW - 3) +
-            '" height="' + r2(g.cellH - 3) + '" rx="4" fill="none" stroke="' + todayCol + '" stroke-width="1.6"/>';
+          push('<rect x="' + r2(cx + 1.5) + '" y="' + r2(cy + 1.5) + '" width="' + r2(g.cellW - 3) +
+            '" height="' + r2(g.cellH - 3) + '" rx="4" fill="none" stroke="' + todayCol + '" stroke-width="1.6"/>');
         }
 
-        // Colour band(s) at bottom
+        // Colour band(s)
         if (evs.length) {
           const cats = [];
           evs.forEach((e) => { const c = categoryById(e.categoryId); if (c && !cats.find((x) => x.id === c.id)) cats.push(c); });
-          const bandH = 7;
-          const by = cy + g.cellH - bandH - 2;
-          const bx = cx + 3;
-          const bw = g.cellW - 6;
-          const n = Math.min(cats.length, 4);
-          const stripeW = bw / n;
+          const bandH = 7, by = cy + g.cellH - bandH - 2, bx = cx + 3, bw = g.cellW - 6;
+          const n = Math.min(cats.length, 4); const stripeW = bw / n;
           for (let j = 0; j < n; j++) {
-            s += '<rect class="ev-band-stripe" x="' + r2(bx + j * stripeW) + '" y="' + r2(by) + '" width="' + r2(stripeW - (j < n - 1 ? 1 : 0)) +
-              '" height="' + bandH + '" rx="1.5" fill="' + cats[j].color + '"/>';
+            push('<rect class="ev-band-stripe" x="' + r2(bx + j * stripeW) + '" y="' + r2(by) + '" width="' + r2(stripeW - (j < n - 1 ? 1 : 0)) +
+              '" height="' + bandH + '" rx="1.5" fill="' + cats[j].color + '"/>');
           }
 
-          // Optional event label on start day
           if (state.showLabels) {
             const starting = evs.filter((e) => e.start === key);
             if (starting.length) {
-              const label = starting[0].name || '';
               const c = categoryById(starting[0].categoryId);
-              const short = clip(label, 9);
-              s += text(cx + g.cellW - 5, cy + 15, esc(short), c ? c.color : th.muted, 7.5, 700, 'end');
+              push(text(cx + g.cellW - 5, cy + 15, esc(clip(starting[0].name || '', 9)), c ? c.color : th.muted, 7.5, 700, 'end'));
             }
           }
         }
       } else if (state.trailingDays) {
         const num = dayNum < 1 ? prevDim + dayNum : dayNum - dim;
-        s += text(cx + 6, cy + 15, num, th.muted, 12, 400, 'start', 0.4);
+        push(text(cx + 6, cy + 15, num, th.muted, 12, 400, 'start', 0.4));
       }
 
-      // Close interactive <g> wrapper
-      if (hasEvents && state.interactiveSvg !== false) s += '</g>';
+      if (hasEvents && state.interactiveSvg !== false) push('</g>');
     }
-    return s;
+    return parts.join('');
   }
 
   function clip(str, n) { return str.length > n ? str.slice(0, n - 1) + '\u2026' : str; }
