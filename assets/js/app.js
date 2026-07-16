@@ -88,7 +88,8 @@
   const ymd = (y, m, d) => y + '-' + pad2(m + 1) + '-' + pad2(d);
   const daysInMonth = (y, m) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   const firstWeekday = (y, m) => new Date(Date.UTC(y, m, 1)).getUTCDay();
-  const todayKey = () => { const d = new Date(); return ymd(d.getFullYear(), d.getMonth(), d.getDate()); };
+  // All date arithmetic uses UTC for consistency; events and today must match.
+  const todayKey = () => { const d = new Date(); return ymd(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
 
   function monthAt(k) {
     const idx = state.startMonth + k;
