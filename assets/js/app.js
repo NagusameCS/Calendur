@@ -69,6 +69,7 @@
       todayColor: '#ffffff',
       dayAlign: 'start',
       eventFilter: '',
+      interactiveView: false,
       categories: [
         { id: nextId(), label: 'Holiday', color: '#c62828' },
         { id: nextId(), label: 'Break',   color: '#1565c0' },
@@ -227,6 +228,147 @@
       '" text-rendering="optimizeLegibility" shape-rendering="geometricPrecision">' + body + '</svg>';
 
     return { svg: svg, width: totalW, height: totalH, theme: th };
+  }
+
+  /* ============================================================================
+   * HTML CALENDAR BUILDER (interactive hover view with tooltips)
+   * ========================================================================== */
+  function buildHtmlCalendar() {
+    const th = THEMES[state.theme] || THEMES.noir;
+    const months = Math.max(1, Math.min(36, state.months | 0));
+    const tKey = todayKey();
+    const wk = weekdayOrder();
+    const todayCol = state.highlightToday ? (state.todayColor || th.today) : th.today;
+
+    let html = '<div class="cal-html-grid" style="background:' + th.page + '">';
+    // Header
+    if ((state.title || '').trim()) {
+      html += '<div class="cal-title" style="color:' + th.header + ';background:' + th.page + ';width:100%">' + esc(state.title) + '</div>';
+    }
+    if ((state.subtitle || '').trim()) {
+      html += '<div class="cal-subtitle" style="color:' + th.sub + ';background:' + th.page + ';width:100%">' + esc(state.subtitle) + '</div>';
+    }
+
+    const wdShort = WEEKDAYS.map((d) => d.toUpperCase().slice(0, 3));
+
+    for (let k = 0; k < months; k++) {
+      const ym = monthAt(k);
+      const { y: yr, m } = ym;
+      const offset = (firstWeekday(yr, m) - state.weekStart + 7) % 7;
+      const dim = daysInMonth(yr, m);
+      const prevDim = daysInMonth(m === 0 ? yr - 1 : yr, (m + 11) % 12);
+      const borderStyle = state.showBorders ? '1px solid ' + th.line : 'none';
+
+      html += '<div class="cal-month" style="background:' + th.month + ';border:' + borderStyle + '">';
+      html += '<div class="cal-month-name" style="color:' + th.header + '">' + esc(MONTHS[m] + ' ' + yr) + '</div>';
+      html += '<table><thead><tr>';
+      for (let i = 0; i < 7; i++) {
+        const wd = wk[i];
+        const isWknd = state.weekendDays && state.weekendDays.indexOf(wd) !== -1;
+        html += '<th style="color:' + (isWknd ? th.muted : th.sub) + '">' + wdShort[wd] + '</th>';
+      }
+      html += '</tr></thead><tbody>';
+
+      let dayIdx = 0;
+      for (let rowN = 0; rowN < 6; rowN++) {
+        html += '<tr>';
+        for (let col = 0; col < 7; col++) {
+          const dayNum = dayIdx - offset + 1;
+          const inMonth = dayNum >= 1 && dayNum <= dim;
+          const wd = wk[col];
+          const isWknd = state.weekendDays && state.weekendDays.indexOf(wd) !== -1;
+          let cellBg = th.month;
+          if (inMonth && state.shadeWeekend && isWknd) cellBg = th.weekend;
+
+          let cls = '';
+          let dataAttrs = '';
+          let bands = '';
+          let tipTitle = '';
+          let tipBody = '';
+
+          if (inMonth) {
+            const key = ymd(yr, m, dayNum);
+            const evs = eventsOn(key);
+            if (evs.length) {
+              cls += ' has-event';
+              const cats = [];
+              evs.forEach((e) => { const c = categoryById(e.categoryId); if (c && !cats.find((x) => x.id === c.id)) cats.push(c); });
+              bands = '<div class="event-band">' + cats.slice(0, 4).map((c) => '<span style="background:' + c.color + '"></span>').join('') + '</div>';
+              // Build tooltip data
+              const tipParts = evs.map((e) => {
+                const c2 = categoryById(e.categoryId);
+                const range2 = e.start === e.end ? e.start : e.start + ' → ' + e.end;
+                return '<div class="tt-name">' + esc(e.name || 'Untitled') + '</div>' +
+                  '<div class="tt-meta">' + esc(range2) + (c2 ? ' · ' + esc(c2.label) : '') + '</div>' +
+                  (e.description ? '<div class="tt-desc">' + esc(e.description) + '</div>' : '');
+              });
+              tipTitle = esc(evs[0].name || '');
+              tipBody = tipParts.join('');
+              dataAttrs = ' data-tip="' + esc(tipBody) + '"';
+            }
+            if (state.highlightToday && key === tKey) cls += ' today-ring';
+          } else if (state.trailingDays) {
+            cls += ' trailing';
+          }
+
+          const num = inMonth ? dayNum : (dayNum < 1 ? prevDim + dayNum : dayNum - dim);
+          const align = state.dayAlign || 'start';
+          html += '<td class="' + cls + '" style="background:' + cellBg + ';border:' + borderStyle + ';text-align:' + align +
+            (cls.includes('today-ring') ? ';box-shadow:inset 0 0 0 1.6px ' + todayCol : '') +
+            '"' + dataAttrs + '>' +
+            '<span class="day-num" style="color:' + th.text + '">' + num + '</span>' + bands + '</td>';
+          dayIdx++;
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table></div>';
+    }
+    html += '</div>';
+
+    // Legend
+    if (state.categories.length) {
+      html += '<div class="cal-legend" style="border-color:' + th.line + ';color:' + th.text + '">';
+      state.categories.forEach((c) => {
+        html += '<span><span class="lg-swatch" style="background:' + c.color + '"></span>' + esc(c.label) + '</span>';
+      });
+      html += '</div>';
+    }
+
+    // Notes
+    if ((state.notes || '').trim()) {
+      html += '<div class="cal-notes" style="color:' + th.sub + '">' +
+        esc(state.notes).replace(/\n/g, '<br>') + '</div>';
+    }
+
+    // Watermark
+    if (state.showWatermark) {
+      html += '<div class="cal-watermark" style="color:' + th.muted + '">Made with Calendur · nagusamecs.github.io</div>';
+    }
+
+    return html;
+  }
+
+  /* Tooltip handler for HTML calendar */
+  function initTooltip() {
+    const tip = $('#cal-tooltip');
+    if (!tip) return;
+    const htmlPane = $('#preview-html');
+    if (!htmlPane) return;
+    htmlPane.addEventListener('mouseover', (e) => {
+      const cell = e.target.closest('[data-tip]');
+      if (!cell) { tip.classList.remove('show'); return; }
+      tip.innerHTML = cell.getAttribute('data-tip');
+      tip.classList.add('show');
+    });
+    htmlPane.addEventListener('mousemove', (e) => {
+      if (!tip.classList.contains('show')) return;
+      let x = e.clientX + 16, y = e.clientY + 12;
+      if (x + tip.offsetWidth > window.innerWidth - 8) x = e.clientX - tip.offsetWidth - 8;
+      if (y + tip.offsetHeight > window.innerHeight - 8) y = e.clientY - tip.offsetHeight - 8;
+      tip.style.left = x + 'px';
+      tip.style.top = y + 'px';
+    });
+    htmlPane.addEventListener('mouseleave', () => tip.classList.remove('show'));
   }
 
   G.fontStack = () => "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
@@ -475,10 +617,21 @@
 
   function renderNow() {
     currentBuild = buildCalendar();
-    $('#preview-canvas').innerHTML = currentBuild.svg;
-    applyZoom();
+    if (state.interactiveView) {
+      $('#preview-canvas').classList.add('hidden');
+      $('#preview-html').classList.remove('hidden');
+      $('#preview-html').innerHTML = buildHtmlCalendar();
+      applyZoom(); // still needed for the stage sizing context
+    } else {
+      $('#preview-html').classList.add('hidden');
+      $('#preview-canvas').classList.remove('hidden');
+      $('#preview-canvas').innerHTML = currentBuild.svg;
+      applyZoom();
+    }
     updateDims();
     save();
+    // re-attach tooltip after HTML is in DOM
+    if (state.interactiveView) initTooltip();
   }
 
   function applyZoom() {
@@ -664,6 +817,75 @@
     $('#csv-panel').classList.add('hidden');
     renderEvents(); render();
     toast('Imported ' + added + ' event' + (added !== 1 ? 's' : ''));
+  }
+
+  /* ---------- GitHub import ---------- */
+  async function importFromGitHub() {
+    let url = $('#gh-url').value.trim();
+    if (!url) { toast('Paste a GitHub raw URL'); return; }
+    // Convert github.com blob URL to raw URL
+    url = url.replace(/^https:\/\/github\.com\/([^\/]+)\/([^\/]+)\/blob\/(.+)/, 'https://raw.githubusercontent.com/$1/$2/$3');
+    if (!url.startsWith('https://raw.githubusercontent.com/') && !url.startsWith('https://raw.')) {
+      // Try to guess: if it's a repo URL without a file, can't proceed
+      if (!url.includes('raw')) { toast('Use a raw.githubusercontent.com URL (or a github.com/blob/… URL)'); return; }
+    }
+    $('#btn-import-gh-go').textContent = 'Fetching…';
+    $('#btn-import-gh-go').disabled = true;
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const text = await resp.text();
+      let parsed;
+      // Try JSON first
+      try {
+        parsed = JSON.parse(text);
+      } catch (e) { /* not JSON */ }
+      if (parsed) {
+        // Is it a full Calendur state?
+        if (parsed.categories && Array.isArray(parsed.categories)) {
+          state = Object.assign(defaultState(), parsed);
+          syncInputsFromState(); render();
+          toast('Imported full calendar config from GitHub');
+        } else if (Array.isArray(parsed)) {
+          // Array of events: [{name, category, start, end, description?}]
+          importEventArray(parsed);
+        } else if (parsed.events && Array.isArray(parsed.events)) {
+          importEventArray(parsed.events);
+        } else {
+          toast('Unrecognized JSON format');
+        }
+      } else {
+        // Treat as CSV
+        $('#csv-text').value = text;
+        importCsv();
+      }
+    } catch (e) {
+      toast('Fetch failed: ' + e.message);
+    }
+    $('#btn-import-gh-go').textContent = 'Fetch & import';
+    $('#btn-import-gh-go').disabled = false;
+    $('#gh-panel').classList.add('hidden');
+  }
+
+  function importEventArray(arr) {
+    let added = 0;
+    arr.forEach((item) => {
+      const name = item.name || item.title || '';
+      let catId = state.categories[0] ? state.categories[0].id : null;
+      const catLabel = item.category || item.cat || item.type || '';
+      if (catLabel) {
+        const found = state.categories.find((c) => c.label.toLowerCase() === catLabel.toLowerCase());
+        if (found) catId = found.id;
+      }
+      if (!catId) return;
+      const start = item.start || item.from || item.begin || '';
+      const end = item.end || item.to || item.finish || start;
+      if (!start) return;
+      state.events.push({ id: nextId(), name: name, description: item.description || item.desc || '', categoryId: catId, start: start, end: end < start ? start : end });
+      added++;
+    });
+    renderEvents(); render();
+    toast('Imported ' + added + ' event' + (added !== 1 ? 's' : '') + ' from GitHub');
   }
 
   /* ---------- Quick-add presets ---------- */
@@ -860,12 +1082,14 @@
       item.innerHTML =
         '<span class="event-dot" style="background:' + (cat ? cat.color : '#666') + '"></span>' +
         '<div class="event-info"><div class="event-name">' + esc(ev.name || '(untitled)') + '</div>' +
-        '<div class="event-date">' + range + (cat ? ' \u00b7 ' + esc(cat.label) : '') + '</div></div>' +
+        '<div class="event-date">' + range + (cat ? ' \u00b7 ' + esc(cat.label) : '') + '</div>' +
+        (ev.description ? '<div class="event-desc">' + esc(ev.description) + '</div>' : '') +
+        '</div>' +
         '<button class="event-dup" title="Duplicate" aria-label="Duplicate">⧉</button>' +
         '<button class="event-del" title="Remove" aria-label="Remove">\u00d7</button>';
       item.querySelector('.event-dup').addEventListener('click', (e) => {
         e.stopPropagation();
-        state.events.push({ id: nextId(), name: ev.name + ' (copy)', categoryId: ev.categoryId, start: ev.start, end: ev.end });
+        state.events.push({ id: nextId(), name: ev.name + ' (copy)', description: ev.description || '', categoryId: ev.categoryId, start: ev.start, end: ev.end });
         renderEvents(); render(); toast('Event duplicated');
       });
       item.querySelector('.event-del').addEventListener('click', () => {
@@ -916,7 +1140,7 @@
 
     // Add event
     $('#btn-add-event').addEventListener('click', addEvent);
-    ['#e-name', '#e-start', '#e-end'].forEach((sel) => {
+    ['#e-name', '#e-start', '#e-end', '#e-desc'].forEach((sel) => {
       $(sel).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addEvent(); } });
     });
 
@@ -927,8 +1151,17 @@
     $('#btn-import-csv').addEventListener('click', () => {
       $('#csv-panel').classList.toggle('hidden');
       $('#preset-panel').classList.add('hidden');
+      $('#gh-panel').classList.add('hidden');
     });
     $('#btn-import-csv-go').addEventListener('click', importCsv);
+
+    // GitHub import toggle
+    $('#btn-import-gh').addEventListener('click', () => {
+      $('#gh-panel').classList.toggle('hidden');
+      $('#csv-panel').classList.add('hidden');
+      $('#preset-panel').classList.add('hidden');
+    });
+    $('#btn-import-gh-go').addEventListener('click', importFromGitHub);
 
     // Quick-add presets toggle
     $('#btn-quick-add').addEventListener('click', () => {
@@ -958,11 +1191,26 @@
     // Day alignment
     $('#c-dayalign').addEventListener('change', (e) => { state.dayAlign = e.target.value; render(); });
 
-    // Zoom
+    // Zoom + view mode
+    $('#btn-view-mode').addEventListener('click', () => {
+      state.interactiveView = !state.interactiveView;
+      $('#btn-view-mode').textContent = state.interactiveView ? '🖱' : '🖱';
+      $('#btn-view-mode').style.background = state.interactiveView ? 'var(--text-primary)' : '';
+      $('#btn-view-mode').style.color = state.interactiveView ? 'var(--bg-primary)' : '';
+      render();
+    });
     $('#zoom-in').addEventListener('click', () => { autoFit = false; zoom = Math.min(4, zoom * 1.2); applyZoom(); });
     $('#zoom-out').addEventListener('click', () => { autoFit = false; zoom = Math.max(0.1, zoom / 1.2); applyZoom(); });
     $('#zoom-fit').addEventListener('click', () => { autoFit = true; applyZoom(); });
     window.addEventListener('resize', () => { if (autoFit) applyZoom(); });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === 's') { e.preventDefault(); doExport(); }
+      if (mod && e.key === 'p') { e.preventDefault(); printPdf(); }
+      if (mod && e.key === 'e') { e.preventDefault(); $('#e-name').focus(); }
+    });
 
     // Config import/export/reset
     $('#btn-export-json').addEventListener('click', exportJson);
@@ -993,6 +1241,7 @@
   function addEvent() {
     const name = $('#e-name').value.trim();
     const catId = $('#e-category').value;
+    const desc = ($('#e-desc') ? $('#e-desc').value.trim() : '');
     let start = $('#e-start').value;
     let end = $('#e-end').value;
     if (!catId) { toast('Add a colour code first'); return; }
@@ -1000,8 +1249,9 @@
     if (!start) start = end;
     if (!end) end = start;
     if (end < start) { const t = start; start = end; end = t; }
-    state.events.push({ id: nextId(), name: name, categoryId: catId, start: start, end: end });
+    state.events.push({ id: nextId(), name: name, description: desc, categoryId: catId, start: start, end: end });
     $('#e-name').value = '';
+    if ($('#e-desc')) $('#e-desc').value = '';
     renderEvents(); render();
     toast('Event added');
   }

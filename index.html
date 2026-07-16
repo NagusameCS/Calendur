@@ -155,10 +155,15 @@
           </div>
           <button id="btn-add-event" class="btn btn-primary btn-block">Add event</button>
         </div>
+        <label class="field">
+          <span>Description <small>(optional — shown in tooltips)</small></span>
+          <input type="text" id="e-desc" placeholder="No classes. School offices remain open." />
+        </label>
         <div class="event-toolbar">
           <input type="text" id="e-filter" class="event-filter" placeholder="Filter events…" />
           <button id="btn-quick-add" class="btn btn-ghost btn-sm" title="Quick-add common dates">⚡ Presets</button>
           <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">📋 Import</button>
+          <button id="btn-import-gh" class="btn btn-ghost btn-sm" title="Import from a GitHub raw URL or repo">🐙 GitHub</button>
         </div>
         <div id="event-list" class="event-list"></div>
         <div class="csv-panel hidden" id="csv-panel">
@@ -169,6 +174,12 @@
         <div class="preset-panel hidden" id="preset-panel">
           <p class="ctl-hint">Click to add common dates for this calendar year.</p>
           <div class="preset-grid" id="preset-grid"></div>
+        </div>
+        <div class="gh-panel hidden" id="gh-panel">
+          <p class="ctl-hint">Paste a GitHub raw URL (e.g. raw.githubusercontent.com/…/events.json) or a repo path.</p>
+          <input type="text" id="gh-url" class="event-filter" placeholder="https://raw.githubusercontent.com/user/repo/main/calendar.json" />
+          <button id="btn-import-gh-go" class="btn btn-secondary btn-block">Fetch &amp; import</button>
+          <p class="ctl-hint" style="margin-top:6px">Supports .json (Calendur config or array of events) and .csv files.</p>
         </div>
       </section>
 
@@ -228,6 +239,7 @@
       <div class="preview-bar">
         <span class="preview-label">Preview</span>
         <div class="preview-zoom">
+          <button id="btn-view-mode" class="zoom-btn" title="Toggle interactive / SVG view">🖱</button>
           <button id="zoom-out" class="zoom-btn" title="Zoom out">−</button>
           <button id="zoom-fit" class="zoom-btn" title="Fit to width">Fit</button>
           <button id="zoom-in" class="zoom-btn" title="Zoom in">+</button>
@@ -235,7 +247,9 @@
       </div>
       <div class="preview-stage" id="preview-stage">
         <div class="preview-canvas" id="preview-canvas"></div>
+        <div class="preview-html hidden" id="preview-html"></div>
       </div>
+      <div class="cal-tooltip hidden" id="cal-tooltip"></div>
     </section>
   </main>
 
