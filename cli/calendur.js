@@ -364,33 +364,40 @@ async function main() {
   // Help
   if (opts.help || opts.h) {
     console.log(`Calendur CLI — headless calendar generator
+
 Usage:
   node cli/calendur.js [options]
 
 Options:
-  --year      <n>   Calendar year (default: current)
+  --year      <n>   Year (1-9999, default: current)
   --months    <n>   Number of months (1-36, default: 10)
   --start     <n>   Start month 0=Jan..11=Dec (default: 8=Sep)
-  --theme     <s>   Theme: noir|paper|mono|slate|blueprint|cream (default: noir)
+  --theme     <s>   noir|paper|mono|slate|blueprint|cream (default: noir)
   --title     <s>   Calendar title
   --subtitle  <s>   Calendar subtitle
-  --notes     <s>   Notes text
-  --weekstart <0|1> 0=Sun, 1=Mon (default: 0)
-  --fontscale <n>   Font size multiplier (default: 1)
-  --watermark        Show "Made with Calendur" credit
-  --config    <f>   Load config from JSON file
+  --notes     <s>   Notes text (appears below legend)
+  --weekstart <0|1> Week starts: 0=Sun, 1=Mon (default: 0)
+  --fontscale <n>   Font size multiplier 0.5-2 (default: 1)
+  --columns   <s>   Grid columns: auto|1-6 (default: auto)
+  --borders   <0|1> Show month borders (default: 1)
+  --watermark        Add "Made with Calendur" credit line
+  --config    <f>   Load full config from JSON file
   --stdin            Read config JSON from stdin
-  --format    <s>   Output: svg|png|jpg (default: svg)
-  --scale     <n>   Scale factor for raster (default: 2 for png/jpg)
-  -o          <f>   Output file (default: stdout)
+  --format    <s>   Output format: svg|png|jpg (default: svg)
+  --scale     <n>   Scale factor for raster output (default: 2)
+  -o          <f>   Output file path (default: stdout)
+  --help, -h        Show this help
+
+JSON config format (--config or --stdin):
+  { "title":"...", "year":2027, "months":12,
+    "categories":[{"label":"Holiday","color":"#c62828"},...],
+    "events":[{"name":"Break","categoryId":"c1","start":"2027-03-15","end":"2027-03-19"},...] }
 
 Examples:
   node cli/calendur.js -o cal.svg
-  node cli/calendur.js --year 2027 --months 12 --theme paper --title "2027" -o 2027.svg
-  node cli/calendur.js --config calendar.json --format png --scale 4 -o out.png
-  cat config.json | node cli/calendur.js --stdin -o out.svg
-
-Security: runs locally — no network calls, no telemetry, no data leaves your machine.`);
+  node cli/calendur.js --year 2027 --months 12 --theme paper -o 2027.svg
+  node cli/calendur.js --config config.json --format png --scale 4 -o out.png
+  echo '{"year":2027,"months":6,"theme":"paper"}' | node cli/calendur.js --stdin -o out.svg`);
     process.exit(0);
   }
 

@@ -157,8 +157,11 @@
     return state.categories.find((c) => c.id === id) || null;
   }
 
-  /* Pre-compute event index: Map<dateKey, Event[]> for O(1) day lookups.
-   * This is rebuilt once per render instead of filtering events for every cell. */
+  /* ---------- Event lookup ---------- */
+
+  /** Pre-compute event index: Map<dateKey, Event[]> for O(1) day lookups.
+   *  Rebuilt once per render. Expands date ranges into individual day keys.
+   *  Capped at 1000 days per event to prevent runaway on multi-year ranges. */
   let _eventIndex = null;
   function buildEventIndex() {
     _eventIndex = new Map();
@@ -198,6 +201,10 @@
   /* ============================================================================
    * SVG BUILDER
    * ========================================================================== */
+
+  /** Build the full SVG calendar from current state.
+   *  Returns { svg, width, height, theme }.
+   *  Layout: title + subtitle → month grid → legend → notes → watermark. */
   function buildCalendar() {
     const th = THEMES[state.theme] || THEMES.noir;
     const months = Math.max(1, Math.min(36, state.months | 0));
@@ -301,6 +308,9 @@
   /* ============================================================================
    * HTML CALENDAR BUILDER (interactive hover view with tooltips)
    * ========================================================================== */
+  /** Build interactive HTML calendar matching the SVG layout.
+   *  Each month is a <table>, cells have data-tip attributes for hover tooltips.
+   *  Returns HTML string. */
   function buildHtmlCalendar() {
     const th = THEMES[state.theme] || THEMES.noir;
     const months = Math.max(1, Math.min(36, state.months | 0));
@@ -451,6 +461,14 @@
     return arr;
   }
 
+  /** Build one month block as SVG. Returns string.
+   *  @param {number} x, y — top-left position in SVG coords
+   *  @param {{y,m}} ym — year and month index (0=Jan)
+   *  @param {object} th — theme object
+   *  @param {number[]} wk — weekday order array
+   *  @param {string} tKey — today's date key (YYYY-MM-DD)
+   *  @param {string} todayCol — today ring colour
+   *  @param {object} g — scaled geometry object */
   function buildMonth(x, y, ym, th, wk, tKey, todayCol, g) {
     const { y: yr, m } = ym;
     const parts = [];
@@ -1399,6 +1417,8 @@
     return Math.max(min, Math.min(max, n));
   }
 
+  /** Add an event with validation (swaps start/end if needed, requires category).
+   *  Calls renderNow() for immediate preview update. */
   function addEvent() {
     const name = $('#e-name').value.trim();
     const catId = $('#e-category').value;
