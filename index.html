@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Calendur — Calendar Generator</title>
+  <meta name="description" content="Generate clean, print-ready school & event calendars. Export SVG, PNG and JPG at any resolution with custom colour-coded holidays, breaks and events." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23000'/%3E%3Crect x='4' y='6' width='16' height='14' rx='2' fill='none' stroke='%23fff' stroke-width='1.4'/%3E%3Cline x1='4' y1='10' x2='20' y2='10' stroke='%23fff' stroke-width='1.4'/%3E%3Cline x1='8' y1='4' x2='8' y2='8' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3Cline x1='16' y1='4' x2='16' y2='8' stroke='%23fff' stroke-width='1.4' stroke-linecap='round'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <!-- Navigation -->
+  <nav id="navbar">
+    <div class="nav-container">
+      <a href="#top" class="nav-logo">Calendur</a>
+      <div class="nav-actions">
+        <button id="btn-import" class="nav-btn" title="Load a saved .json config">Import</button>
+        <button id="btn-export-json" class="nav-btn" title="Save current config to .json">Export</button>
+        <button id="btn-reset" class="nav-btn" title="Reset to defaults">Reset</button>
+        <a href="https://github.com" target="_blank" rel="noopener" class="nav-btn nav-btn-ghost" id="repo-link" title="Source">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <main id="top" class="app">
+    <!-- Controls sidebar -->
+    <aside class="panel" aria-label="Calendar controls">
+      <header class="panel-head">
+        <h1>Calendur</h1>
+        <p>Clean, colour-coded calendars for schools &amp; events. Export SVG, PNG or JPG at any resolution.</p>
+      </header>
+
+      <!-- Setup -->
+      <section class="ctl-group">
+        <h2 class="ctl-title">Calendar</h2>
+        <label class="field">
+          <span>Title</span>
+          <input type="text" id="c-title" placeholder="2026–2027 Academic Year" />
+        </label>
+        <label class="field">
+          <span>Subtitle</span>
+          <input type="text" id="c-subtitle" placeholder="Springfield High School" />
+        </label>
+        <div class="field-row">
+          <label class="field">
+            <span>Year</span>
+            <input type="number" id="c-year" min="1" max="9999" step="1" />
+          </label>
+          <label class="field">
+            <span>Start month</span>
+            <select id="c-start-month"></select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span># of months</span>
+            <input type="number" id="c-months" min="1" max="36" step="1" />
+          </label>
+          <label class="field">
+            <span>Columns</span>
+            <select id="c-columns">
+              <option value="auto">Auto</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>Week starts</span>
+            <select id="c-weekstart">
+              <option value="0">Sunday</option>
+              <option value="1">Monday</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Theme</span>
+            <select id="c-theme"></select>
+          </label>
+        </div>
+        <div class="check-row">
+          <label class="check"><input type="checkbox" id="c-weekend" /> Shade weekends</label>
+          <label class="check"><input type="checkbox" id="c-today" /> Highlight today</label>
+          <label class="check"><input type="checkbox" id="c-labels" /> Event labels</label>
+          <label class="check"><input type="checkbox" id="c-trailing" /> Trailing days</label>
+        </div>
+      </section>
+
+      <!-- Categories -->
+      <section class="ctl-group">
+        <h2 class="ctl-title">Colour codes</h2>
+        <p class="ctl-hint">Assign a colour + label to each type (holiday, break, exam…). These appear in the legend.</p>
+        <label class="field">
+          <span>Apply palette</span>
+          <select id="c-palette"></select>
+        </label>
+        <div id="cat-list" class="cat-list"></div>
+        <button id="btn-add-cat" class="btn btn-secondary btn-block">+ Add colour code</button>
+      </section>
+
+      <!-- Events -->
+      <section class="ctl-group">
+        <h2 class="ctl-title">Events &amp; breaks</h2>
+        <p class="ctl-hint">Add single days or ranges. A range fills every day between the two dates.</p>
+        <div class="event-form">
+          <label class="field">
+            <span>Name</span>
+            <input type="text" id="e-name" placeholder="Winter Break" />
+          </label>
+          <div class="field-row">
+            <label class="field">
+              <span>Category</span>
+              <select id="e-category"></select>
+            </label>
+          </div>
+          <div class="field-row">
+            <label class="field">
+              <span>Start date</span>
+              <input type="date" id="e-start" />
+            </label>
+            <label class="field">
+              <span>End date</span>
+              <input type="date" id="e-end" />
+            </label>
+          </div>
+          <button id="btn-add-event" class="btn btn-primary btn-block">Add event</button>
+        </div>
+        <div id="event-list" class="event-list"></div>
+      </section>
+
+      <!-- Export -->
+      <section class="ctl-group">
+        <h2 class="ctl-title">Export</h2>
+        <div class="field-row">
+          <label class="field">
+            <span>Format</span>
+            <select id="x-format">
+              <option value="svg">SVG (vector)</option>
+              <option value="png">PNG</option>
+              <option value="jpg">JPG</option>
+            </select>
+          </label>
+          <label class="field" id="x-scale-wrap">
+            <span>Resolution</span>
+            <select id="x-scale">
+              <option value="1">1× (standard)</option>
+              <option value="2">2× (retina)</option>
+              <option value="3">3×</option>
+              <option value="4">4× (print)</option>
+              <option value="custom">Custom width…</option>
+            </select>
+          </label>
+        </div>
+        <label class="field hidden" id="x-width-wrap">
+          <span>Custom width (px)</span>
+          <input type="number" id="x-width" min="200" max="20000" step="10" value="3000" />
+        </label>
+        <p class="ctl-hint" id="x-dims"></p>
+        <button id="btn-download" class="btn btn-primary btn-block">Download</button>
+        <button id="btn-copy-svg" class="btn btn-secondary btn-block">Copy SVG markup</button>
+      </section>
+
+      <footer class="panel-foot">
+        <p>Design inspired by <a href="https://nagusamecs.github.io" target="_blank" rel="noopener">nagusamecs.github.io</a>. Built with vanilla JS — no dependencies, fully client-side.</p>
+      </footer>
+    </aside>
+
+    <!-- Preview -->
+    <section class="preview" aria-label="Calendar preview">
+      <div class="preview-bar">
+        <span class="preview-label">Preview</span>
+        <div class="preview-zoom">
+          <button id="zoom-out" class="zoom-btn" title="Zoom out">−</button>
+          <button id="zoom-fit" class="zoom-btn" title="Fit to width">Fit</button>
+          <button id="zoom-in" class="zoom-btn" title="Zoom in">+</button>
+        </div>
+      </div>
+      <div class="preview-stage" id="preview-stage">
+        <div class="preview-canvas" id="preview-canvas"></div>
+      </div>
+    </section>
+  </main>
+
+  <input type="file" id="file-input" accept="application/json,.json" class="hidden" />
+  <div id="toast" class="toast"></div>
+
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
