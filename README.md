@@ -50,10 +50,7 @@ uploaded anywhere.
 
 ## Credits
 
-- Visual design and dark aesthetic inspired by
-  [nagusamecs.github.io](https://nagusamecs.github.io).
-- System font stack (`-apple-system`, `Segoe UI`, Helvetica) — no web fonts, so
-  exports render consistently offline.
+System font stack — no web fonts, exports render consistently offline.
 
 ## License
 

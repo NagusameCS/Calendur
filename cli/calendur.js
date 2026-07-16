@@ -190,7 +190,7 @@ function buildCalendar(state) {
   body += notesBlock.svg;
   if (state.showWatermark) {
     body += text(totalW - g.margin, totalH - g.margin + 4,
-      'Made with Calendur \u00b7 nagusamecs.github.io', th.muted, 9, 400, 'end', 0.45);
+      'Made with Calendur', th.muted, 9, 400, 'end', 0.45);
   }
 
   return '<svg xmlns="http://www.w3.org/2000/svg" width="' + totalW + '" height="' + totalH +

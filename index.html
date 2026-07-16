@@ -27,7 +27,7 @@
     <aside class="panel" aria-label="Calendar controls">
       <header class="panel-head">
         <h1>Calendur</h1>
-        <p>Clean, colour-coded calendars for schools &amp; events. Export SVG, PNG or JPG at any resolution.</p>
+        <p>Generate colour-coded calendars for schools and events. Export as SVG, PNG, or JPG.</p>
       </header>
 
       <!-- Setup -->
@@ -157,15 +157,15 @@
           <button id="btn-add-event" class="btn btn-primary btn-block">Add event</button>
         </div>
         <label class="field">
-          <span>Description <small>(optional — shown in tooltips)</small></span>
-          <input type="text" id="e-desc" placeholder="No classes. School offices remain open." />
+          <span>Description</span>
+          <input type="text" id="e-desc" placeholder="Optional details shown in tooltips" />
         </label>
         <div class="event-toolbar">
           <input type="text" id="e-filter" class="event-filter" placeholder="Filter events…" />
-          <button id="btn-quick-add" class="btn btn-ghost btn-sm" title="Quick-add common dates">⚡ Presets</button>
-          <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">📋 CSV</button>
-          <button id="btn-import-json" class="btn btn-ghost btn-sm" title="Paste or import JSON">📦 JSON</button>
-          <button id="btn-import-gh" class="btn btn-ghost btn-sm" title="Import from a GitHub raw URL or repo">🐙 GitHub</button>
+          <button id="btn-quick-add" class="btn btn-ghost btn-sm" title="Quick-add common dates">Presets</button>
+          <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">CSV</button>
+          <button id="btn-import-json" class="btn btn-ghost btn-sm" title="Paste or import JSON">JSON</button>
+          <button id="btn-import-gh" class="btn btn-ghost btn-sm" title="Import from a GitHub raw URL or repo">GitHub</button>
         </div>
         <div id="event-list" class="event-list"></div>
         <div class="csv-panel hidden" id="csv-panel">
@@ -194,7 +194,7 @@
       <section class="ctl-group">
         <h2 class="ctl-title">Notes &amp; descriptions</h2>
         <p class="ctl-hint">Add freeform descriptions, policies, or context about breaks and holidays. Appears at the bottom of the exported calendar.</p>
-        <textarea id="c-notes" class="notes-area" rows="5" placeholder="Example:&#10;&#10;Winter Break — December 21 through January 2. No classes.&#10;Spring Break — March 15–19. School offices remain open.&#10;&#10;All public holidays observed as per district calendar."></textarea>
+        <textarea id="c-notes" class="notes-area" rows="5" placeholder="Descriptions, policies, or context about breaks and holidays. Appears at the bottom of the exported calendar."></textarea>
       </section>
 
       <!-- Export -->
@@ -230,15 +230,15 @@
         <p class="ctl-hint" id="x-dims"></p>
         <button id="btn-download" class="btn btn-primary btn-block">Download</button>
         <div class="btn-row">
-          <button id="btn-print" class="btn btn-secondary">🖨 Print</button>
-          <button id="btn-share" class="btn btn-secondary">🔗 Share</button>
-          <button id="btn-embed" class="btn btn-secondary" title="Get iframe embed code for your website">&lt;/&gt; Embed</button>
-          <button id="btn-copy-svg" class="btn btn-secondary">📋 SVG</button>
+          <button id="btn-print" class="btn btn-secondary">Print</button>
+          <button id="btn-share" class="btn btn-secondary">Share</button>
+          <button id="btn-embed" class="btn btn-secondary" title="Get iframe embed code for your website">Embed</button>
+          <button id="btn-copy-svg" class="btn btn-secondary">SVG</button>
         </div>
       </section>
 
       <footer class="panel-foot">
-        <p>Design inspired by <a href="https://nagusamecs.github.io" target="_blank" rel="noopener">nagusamecs.github.io</a> &mdash; aesthetic used with appreciation. Built with vanilla JS; no dependencies, no telemetry, fully client-side. Calendars are generated in your browser — nothing is ever uploaded.</p>
+        <p>Calendars are generated in your browser. Nothing is uploaded. No dependencies.</p>
       </footer>
     </aside>
 
@@ -247,7 +247,7 @@
       <div class="preview-bar">
         <span class="preview-label">Preview</span>
         <div class="preview-zoom">
-          <button id="btn-view-mode" class="zoom-btn" title="Toggle interactive / SVG view">🖱</button>
+          <button id="btn-view-mode" class="zoom-btn" title="Toggle interactive / SVG view">View</button>
           <button id="zoom-out" class="zoom-btn" title="Zoom out">−</button>
           <button id="zoom-fit" class="zoom-btn" title="Fit to width">Fit</button>
           <button id="zoom-in" class="zoom-btn" title="Zoom in">+</button>

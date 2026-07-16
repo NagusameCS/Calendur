@@ -1,7 +1,7 @@
 /* ============================================================================
  * Calendur — client-side calendar generator
  * Builds a print-ready SVG calendar grid and exports to SVG / PNG / JPG.
- * No dependencies. Design inspired by nagusamecs.github.io.
+ * No dependencies.
  * ========================================================================== */
 (function () {
   'use strict';
@@ -287,7 +287,7 @@
     // Watermark
     if (state.showWatermark) {
       p(text(totalW - g.margin, totalH - g.margin + 4,
-        'Made with Calendur \u00b7 nagusamecs.github.io', th.muted, 9, 400, 'end', 0.45));
+        'Made with Calendur', th.muted, 9, 400, 'end', 0.45));
     }
 
     const svg =
@@ -414,7 +414,7 @@
 
     // Watermark
     if (state.showWatermark) {
-      html += '<div class="cal-watermark" style="color:' + th.muted + '">Made with Calendur · nagusamecs.github.io</div>';
+      html += '<div class="cal-watermark" style="color:' + th.muted + '">Made with Calendur</div>';
     }
 
     return html;
@@ -1242,7 +1242,7 @@
         '<div class="event-date">' + range + (cat ? ' \u00b7 ' + esc(cat.label) : '') + '</div>' +
         (ev.description ? '<div class="event-desc">' + esc(ev.description) + '</div>' : '') +
         '</div>' +
-        '<button class="event-dup" title="Duplicate" aria-label="Duplicate">⧉</button>' +
+        '<button class="event-dup" title="Duplicate" aria-label="Duplicate">+</button>' +
         '<button class="event-del" title="Remove" aria-label="Remove">\u00d7</button>';
       item.querySelector('.event-dup').addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1355,7 +1355,7 @@
     // Zoom + view mode
     $('#btn-view-mode').addEventListener('click', () => {
       state.interactiveView = !state.interactiveView;
-      $('#btn-view-mode').textContent = state.interactiveView ? '🖱' : '🖱';
+      $('#btn-view-mode').textContent = state.interactiveView ? 'HTML' : 'SVG';
       $('#btn-view-mode').style.background = state.interactiveView ? 'var(--text-primary)' : '';
       $('#btn-view-mode').style.color = state.interactiveView ? 'var(--bg-primary)' : '';
       render();
@@ -1411,7 +1411,7 @@
     if (!end) end = start;
     if (end < start) {
       const t = start; start = end; end = t;
-      toast('⚠ Start/end swapped — start must be before end');
+      toast('Dates swapped — start must be before end');
     }
     state.events.push({ id: nextId(), name: name, description: desc, categoryId: catId, start: start, end: end });
     $('#e-name').value = '';
@@ -1590,7 +1590,7 @@
     // Show a small overlay button to exit
     const exitBtn = document.createElement('button');
     exitBtn.id = 'exit-view-btn';
-    exitBtn.textContent = '✎ Edit';
+    exitBtn.textContent = 'Edit';
     exitBtn.style.cssText = 'position:fixed;top:12px;right:16px;z-index:9999;background:var(--text-primary);color:var(--bg-primary);border:none;padding:6px 14px;border-radius:6px;font-size:0.78rem;cursor:pointer;font-family:var(--font);';
     exitBtn.addEventListener('click', () => {
       document.querySelector('.panel').style.display = '';
