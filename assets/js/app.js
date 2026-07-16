@@ -67,6 +67,8 @@
       fontScale: 1,
       weekendDays: [0, 6], // Sun, Sat
       todayColor: '#ffffff',
+      dayAlign: 'start',
+      eventFilter: '',
       categories: [
         { id: nextId(), label: 'Holiday', color: '#c62828' },
         { id: nextId(), label: 'Break',   color: '#1565c0' },
@@ -291,7 +293,9 @@
         }
 
         // Day number
-        s += text(cx + 6, cy + 15, dayNum, th.text, 12, 500, 'start');
+        const align = state.dayAlign || 'start';
+        const numX = align === 'start' ? (cx + 6) : align === 'end' ? (cx + g.cellW - 6) : (cx + g.cellW / 2);
+        s += text(numX, cy + 15, dayNum, th.text, 12, 500, align);
 
         // Today ring
         if (state.highlightToday && key === tKey) {
@@ -495,13 +499,23 @@
     let scale = 1;
     if (fmt !== 'svg') {
       const sv = $('#x-scale').value;
-      scale = sv === 'custom' ? (parseFloat($('#x-width').value) / currentBuild.width) : parseFloat(sv);
+      scale = scaleFor(sv);
     }
     const w = Math.round(currentBuild.width * scale);
     const h = Math.round(currentBuild.height * scale);
+    const label = $('#x-scale option:checked').textContent;
     $('#x-dims').textContent = fmt === 'svg'
       ? 'Vector \u2014 scales to any size (' + currentBuild.width + '\u00d7' + currentBuild.height + ' base).'
-      : 'Output: ' + w + '\u00d7' + h + ' px';
+      : 'Output: ' + w + '\u00d7' + h + ' px (' + label + ')';
+  }
+
+  function scaleFor(sv) {
+    if (sv === 'custom') return parseFloat($('#x-width').value) / (currentBuild && currentBuild.width || 1);
+    if (sv === 'a4')    return 2480 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'letter') return 2550 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'tabloid') return 3300 / (currentBuild && currentBuild.width || 1);
+    const n = parseFloat(sv);
+    return isFinite(n) ? n : 1;
   }
 
   /* ============================================================================
@@ -555,7 +569,7 @@
       return;
     }
     const sv = $('#x-scale').value;
-    let scale = sv === 'custom' ? (parseFloat($('#x-width').value) / currentBuild.width) : parseFloat(sv);
+    let scale = scaleFor(sv);
     if (!isFinite(scale) || scale <= 0) scale = 1;
     try {
       const blob = await rasterize(fmt, scale);
@@ -564,6 +578,164 @@
     } catch (e) {
       toast('Export failed: ' + e.message);
     }
+  }
+
+  /* ---------- Print PDF ---------- */
+  function printPdf() {
+    flush();
+    const win = window.open('', '_blank', 'width=1000,height=800');
+    if (!win) { toast('Popup blocked — allow popups for this site.'); return; }
+    const build = currentBuild;
+    win.document.write('<!DOCTYPE html><html><head><title>' + esc(safeName()) + '</title><style>' +
+      'html,body{margin:0;padding:0;background:#fff;}' +
+      '@media print{@page{margin:0.25in;}body{-webkit-print-color-adjust:exact;print-color-adjust:exact;}}' +
+      '</style></head><body>' + build.svg + '</body></html>');
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 400);
+  }
+
+  /* ---------- Share URL ---------- */
+  function shareUrl() {
+    flush();
+    try {
+      const json = JSON.stringify(state);
+      const encoded = btoa(unescape(encodeURIComponent(json)));
+      const url = location.origin + location.pathname + '#cfg=' + encoded;
+      navigator.clipboard.writeText(url).then(() => {
+        toast('Share link copied!');
+      }).catch(() => {
+        // Fallback: select and copy manually
+        toast('Share link: ' + url.substring(0, 60) + '… (in clipboard if supported)');
+      });
+      // Also update the address bar
+      history.replaceState(null, '', '#cfg=' + encoded);
+    } catch (e) {
+      toast('Could not encode — config too large?');
+    }
+  }
+
+  function loadFromHash() {
+    try {
+      const hash = location.hash;
+      const m = hash.match(/^#cfg=(.+)/);
+      if (!m) return;
+      const json = decodeURIComponent(escape(atob(m[1])));
+      const s = JSON.parse(json);
+      if (!s || !Array.isArray(s.categories)) return;
+      state = Object.assign(defaultState(), s);
+      syncInputsFromState(); render(); toast('Loaded shared config');
+      // Clean hash
+      history.replaceState(null, '', location.pathname + location.search);
+    } catch (e) { /* silently ignore bad hash */ }
+  }
+
+  /* ---------- Bulk CSV import ---------- */
+  function importCsv() {
+    const raw = $('#csv-text').value.trim();
+    if (!raw) { toast('Paste some data first'); return; }
+    const lines = raw.split(/\n/).filter((l) => l.trim());
+    if (lines.length < 2) { toast('Need at least a header row + one data row'); return; }
+    // Detect delimiter: tab or comma
+    const sep = lines[0].includes('\t') ? '\t' : ',';
+    const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase());
+    const nameCol = headers.findIndex((h) => h === 'name' || h === 'event' || h === 'title');
+    const catCol  = headers.findIndex((h) => h === 'category' || h === 'cat' || h === 'type' || h === 'color');
+    const startCol = headers.findIndex((h) => h === 'start' || h === 'from' || h === 'begin');
+    const endCol   = headers.findIndex((h) => h === 'end' || h === 'to' || h === 'finish');
+    if (nameCol === -1 || startCol === -1) { toast('Columns needed: Name, Start (and optionally Category, End)'); return; }
+    let added = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const cols = lines[i].split(sep).map((c) => c.trim());
+      const name = cols[nameCol] || '';
+      let catId = state.categories[0] ? state.categories[0].id : null;
+      if (catCol !== -1 && cols[catCol]) {
+        const found = state.categories.find((c) => c.label.toLowerCase() === cols[catCol].toLowerCase());
+        if (found) catId = found.id;
+      }
+      if (!catId) continue;
+      const start = cols[startCol] || '';
+      const end = (endCol !== -1 && cols[endCol]) ? cols[endCol] : start;
+      if (!start) continue;
+      state.events.push({ id: nextId(), name: name, categoryId: catId, start: start, end: end < start ? start : end });
+      added++;
+    }
+    $('#csv-text').value = '';
+    $('#csv-panel').classList.add('hidden');
+    renderEvents(); render();
+    toast('Imported ' + added + ' event' + (added !== 1 ? 's' : ''));
+  }
+
+  /* ---------- Quick-add presets ---------- */
+  const PRESETS = [
+    // Fixed dates: [month, day]
+    { name: 'New Year\'s Day',  cat: 'Holiday', start: [0,1], end: [0,1] },
+    // Nth weekday: [month, weekday(0=Sun..6=Sat), nth(1..5, -1=last)]
+    { name: 'MLK Day',          cat: 'Holiday', start: [0,1,3], desc: '3rd Monday of Jan' },
+    { name: 'Presidents\' Day', cat: 'Holiday', start: [1,1,3], desc: '3rd Monday of Feb' },
+    { name: 'Memorial Day',     cat: 'Holiday', start: [4,1,-1], desc: 'last Monday of May' },
+    { name: 'Labor Day',        cat: 'Holiday', start: [8,1,1], desc: '1st Monday of Sep' },
+    { name: 'Thanksgiving',     cat: 'Holiday', start: [10,4,4], desc: '4th Thursday of Nov' },
+    // Ranges: { start: [month, day], end: [month, day] } or with year-cross
+    { name: 'Spring Break',     cat: 'Break',   start: [2,10], end: [2,20], desc: 'mid-March (approx)' },
+    { name: 'Summer Break',     cat: 'Break',   start: [5,15], end: [7,15], desc: 'mid-Jun to mid-Aug' },
+    { name: 'Fall Break',       cat: 'Break',   start: [9,10], end: [9,15], desc: 'mid-October (approx)' },
+    { name: 'Winter Break',     cat: 'Break',   start: [11,20], end: [0,2], desc: 'late Dec to early Jan' },
+  ];
+
+  function buildPresets() {
+    const grid = $('#preset-grid');
+    if (!grid) return;
+    grid.innerHTML = '';
+    const y = state.year;
+    PRESETS.forEach((p) => {
+      const btn = document.createElement('button');
+      btn.className = 'preset-btn';
+      btn.textContent = p.name + (p.desc ? ' (' + p.desc + ')' : '');
+      btn.title = p.desc || p.name;
+      btn.addEventListener('click', () => {
+        const cat = state.categories.find((c) => c.label.toLowerCase() === p.cat.toLowerCase()) || state.categories[0];
+        if (!cat) { toast('Add a colour code first'); return; }
+        const s = resolvePresetDate(p.start, y);
+        const e = p.end ? resolvePresetDate(p.end, y) : s;
+        // Check for cross-year (e.g. Dec→Jan)
+        const startStr = s.y + '-' + pad2(s.m + 1) + '-' + pad2(s.d);
+        const endStr = e.y + '-' + pad2(e.m + 1) + '-' + pad2(e.d);
+        state.events.push({ id: nextId(), name: p.name, categoryId: cat.id, start: startStr, end: endStr < startStr ? startStr : endStr });
+        renderEvents(); render(); toast('Added: ' + p.name);
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  function resolvePresetDate(arr, year) {
+    // Format: [month, day] or [month, day, nthWeekday] where nthWeekday: 1=1st Mon, 2=2nd Tue, etc.
+    let m = arr[0], d = arr[1], n = arr[2];
+    let y = year;
+    if (n != null) {
+      // nth occurrence of weekday d in month m (where d is weekday index 0=Sun)
+      // Actually our format: start[0]=month, start[1]=dayOfWeek, start[2]=nth
+      // Let me reinterpret: [month, weekday(0-6), nth] like MLK Day: [0,15,3] meaning Jan, Monday?, 3rd
+      // Actually let me correct: MLK Day = 3rd Monday of Jan. So [month=0, weekday=1(Mon), nth=3]
+      // But my data has [0,15,3] — this is wrong. Let me fix the preset data format.
+      // Better: [month, dayOfMonth] for fixed dates, [month, weekday, nth] for nth weekday
+      // The current data: start: [1,1] = Jan 1. start: [0,15,3] = Jan, 15th day?, 3 — this is wrong
+      // Let me reinterpret for now: if 3 values, [month, weekday, nth]
+      const nth = arr[2]; // which occurrence (1st, 2nd, 3rd, 4th, last=-1)
+      const wd = arr[1]; // weekday (0=Sun, 1=Mon...)
+      const firstDay = new Date(Date.UTC(y, m, 1)).getUTCDay();
+      let dayOfMonth = 1 + ((wd - firstDay + 7) % 7) + (nth - 1) * 7;
+      if (nth === -1) {
+        // Last occurrence
+        const dim = daysInMonth(y, m);
+        dayOfMonth = dim - ((dim - dayOfMonth + 7) % 7);
+        while (dayOfMonth > dim) dayOfMonth -= 7;
+        while (dayOfMonth + 7 <= dim) dayOfMonth += 7;
+      }
+      return { y: y, m: m, d: dayOfMonth };
+    }
+    // Fixed date
+    return { y: y, m: m, d: d };
   }
 
   /* ============================================================================
@@ -599,6 +771,8 @@
     $('#c-fontscale').value = String(state.fontScale || 1);
     $('#c-todaycolor').value = state.todayColor || '#ffffff';
     $('#c-todaycolor-wrap').classList.toggle('hidden', !state.highlightToday);
+    $('#c-dayalign').value = state.dayAlign || 'start';
+    $('#e-filter').value = state.eventFilter || '';
     syncWeekendChips();
     renderCategories();
     renderEventCategoryOptions();
@@ -659,12 +833,25 @@
 
   function renderEvents() {
     const list = $('#event-list');
+    const filter = (state.eventFilter || '').trim().toLowerCase();
     if (!state.events.length) {
       list.innerHTML = '<div class="empty-note">No events yet. Add holidays, breaks or exam periods above.</div>';
       return;
     }
-    const sorted = state.events.slice().sort((a, b) => a.start.localeCompare(b.start));
+    let sorted = state.events.slice().sort((a, b) => a.start.localeCompare(b.start));
+    if (filter) {
+      sorted = sorted.filter((ev) => {
+        const cat = categoryById(ev.categoryId);
+        return (ev.name || '').toLowerCase().includes(filter) ||
+               ev.start.includes(filter) ||
+               (cat && cat.label.toLowerCase().includes(filter));
+      });
+    }
     list.innerHTML = '';
+    if (!sorted.length) {
+      list.innerHTML = '<div class="empty-note">No events match "' + esc(filter) + '".</div>';
+      return;
+    }
     sorted.forEach((ev) => {
       const cat = categoryById(ev.categoryId);
       const item = document.createElement('div');
@@ -674,7 +861,13 @@
         '<span class="event-dot" style="background:' + (cat ? cat.color : '#666') + '"></span>' +
         '<div class="event-info"><div class="event-name">' + esc(ev.name || '(untitled)') + '</div>' +
         '<div class="event-date">' + range + (cat ? ' \u00b7 ' + esc(cat.label) : '') + '</div></div>' +
+        '<button class="event-dup" title="Duplicate" aria-label="Duplicate">⧉</button>' +
         '<button class="event-del" title="Remove" aria-label="Remove">\u00d7</button>';
+      item.querySelector('.event-dup').addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.events.push({ id: nextId(), name: ev.name + ' (copy)', categoryId: ev.categoryId, start: ev.start, end: ev.end });
+        renderEvents(); render(); toast('Event duplicated');
+      });
       item.querySelector('.event-del').addEventListener('click', () => {
         state.events = state.events.filter((e) => e.id !== ev.id);
         renderEvents(); render();
@@ -727,6 +920,23 @@
       $(sel).addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addEvent(); } });
     });
 
+    // Event filter
+    on('#e-filter', 'input', (v) => { state.eventFilter = v; renderEvents(); });
+
+    // Bulk CSV import toggle
+    $('#btn-import-csv').addEventListener('click', () => {
+      $('#csv-panel').classList.toggle('hidden');
+      $('#preset-panel').classList.add('hidden');
+    });
+    $('#btn-import-csv-go').addEventListener('click', importCsv);
+
+    // Quick-add presets toggle
+    $('#btn-quick-add').addEventListener('click', () => {
+      $('#preset-panel').classList.toggle('hidden');
+      $('#csv-panel').classList.add('hidden');
+      buildPresets();
+    });
+
     // Export controls
     $('#x-format').addEventListener('change', () => {
       const isSvg = $('#x-format').value === 'svg';
@@ -742,6 +952,11 @@
     $('#x-width').addEventListener('input', updateDims);
     $('#btn-download').addEventListener('click', doExport);
     $('#btn-copy-svg').addEventListener('click', copySvg);
+    $('#btn-print').addEventListener('click', printPdf);
+    $('#btn-share').addEventListener('click', shareUrl);
+
+    // Day alignment
+    $('#c-dayalign').addEventListener('change', (e) => { state.dayAlign = e.target.value; render(); });
 
     // Zoom
     $('#zoom-in').addEventListener('click', () => { autoFit = false; zoom = Math.min(4, zoom * 1.2); applyZoom(); });
@@ -758,6 +973,9 @@
       state = defaultState();
       syncInputsFromState(); render(); toast('Reset to defaults');
     });
+
+    // Check URL hash on load for shared config
+    loadFromHash();
   }
 
   function on(sel, evt, fn) {

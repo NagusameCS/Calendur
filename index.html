@@ -98,6 +98,14 @@
             <option value="1.15">Large</option>
           </select>
         </label>
+        <label class="field">
+          <span>Day number align</span>
+          <select id="c-dayalign">
+            <option value="start" selected>Left</option>
+            <option value="middle">Center</option>
+            <option value="end">Right</option>
+          </select>
+        </label>
         <div class="field">
           <span>Weekend days</span>
           <div class="weekend-row" id="weekend-row"></div>
@@ -147,7 +155,21 @@
           </div>
           <button id="btn-add-event" class="btn btn-primary btn-block">Add event</button>
         </div>
+        <div class="event-toolbar">
+          <input type="text" id="e-filter" class="event-filter" placeholder="Filter events…" />
+          <button id="btn-quick-add" class="btn btn-ghost btn-sm" title="Quick-add common dates">⚡ Presets</button>
+          <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">📋 Import</button>
+        </div>
         <div id="event-list" class="event-list"></div>
+        <div class="csv-panel hidden" id="csv-panel">
+          <p class="ctl-hint">Paste CSV or tab-separated data. First row is a header (Name, Category, Start, End).</p>
+          <textarea id="csv-text" class="csv-area" rows="5" placeholder="Name&#9;Category&#9;Start&#9;End&#10;Winter Break&#9;Break&#9;2026-12-21&#9;2027-01-02&#10;MLK Day&#9;Holiday&#9;2027-01-20"></textarea>
+          <button id="btn-import-csv-go" class="btn btn-secondary btn-block">Import rows</button>
+        </div>
+        <div class="preset-panel hidden" id="preset-panel">
+          <p class="ctl-hint">Click to add common dates for this calendar year.</p>
+          <div class="preset-grid" id="preset-grid"></div>
+        </div>
       </section>
 
       <!-- Notes -->
@@ -176,6 +198,9 @@
               <option value="2">2× (retina)</option>
               <option value="3">3×</option>
               <option value="4">4× (print)</option>
+              <option value="a4">A4 @ 300 dpi</option>
+              <option value="letter">US Letter @ 300 dpi</option>
+              <option value="tabloid">Tabloid @ 300 dpi</option>
               <option value="custom">Custom width…</option>
             </select>
           </label>
@@ -186,7 +211,11 @@
         </label>
         <p class="ctl-hint" id="x-dims"></p>
         <button id="btn-download" class="btn btn-primary btn-block">Download</button>
-        <button id="btn-copy-svg" class="btn btn-secondary btn-block">Copy SVG markup</button>
+        <div class="btn-row">
+          <button id="btn-print" class="btn btn-secondary">🖨 Print PDF</button>
+          <button id="btn-share" class="btn btn-secondary">🔗 Share URL</button>
+          <button id="btn-copy-svg" class="btn btn-secondary">📋 Copy SVG</button>
+        </div>
       </section>
 
       <footer class="panel-foot">
