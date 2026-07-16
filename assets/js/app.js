@@ -70,6 +70,7 @@
       dayAlign: 'start',
       eventFilter: '',
       interactiveView: false,
+      interactiveSvg: true,  // embed hover tooltips in SVG exports
       categories: [
         { id: nextId(), label: 'Holiday', color: '#c62828' },
         { id: nextId(), label: 'Break',   color: '#1565c0' },
@@ -194,6 +195,17 @@
     let body = '';
     // Background
     body += rect(0, 0, totalW, totalH, th.page, null, 0);
+
+    // Interactive SVG: embed CSS for hover feedback + tooltips
+    if (state.interactiveSvg !== false) {
+      body += '<style>' +
+        '.ev-day:hover { filter: brightness(1.18); cursor: pointer; }' +
+        '.ev-day:hover .ev-tint { opacity: 0.35; }' +
+        '.ev-band-stripe:hover { filter: brightness(1.3); }' +
+        '.ev-band-stripe { transition: filter 0.12s ease; }' +
+        '.ev-day { transition: filter 0.12s ease; }' +
+        '</style>';
+    }
 
     // Title / subtitle
     if (hasTitle) {
@@ -426,6 +438,21 @@
       let cellBg = th.month;
       if (inMonth && state.shadeWeekend && isWknd) cellBg = th.weekend;
 
+      // For interactive SVG mode: wrap event days in a <g> with a <title>
+      const hasEvents = inMonth && eventsOn(ymd(yr, m, dayNum)).length > 0;
+      if (hasEvents && state.interactiveSvg !== false) {
+        const key = ymd(yr, m, dayNum);
+        const evs = eventsOn(key);
+        const tipParts = evs.map((e) => {
+          const c2 = categoryById(e.categoryId);
+          const r2d = e.start === e.end ? e.start : e.start + ' → ' + e.end;
+          return esc(e.name || 'Untitled') + ' | ' + esc(r2d) +
+            (c2 ? ' · ' + esc(c2.label) : '') +
+            (e.description ? ' — ' + esc(e.description) : '');
+        });
+        s += '<g class="ev-day"><title>' + tipParts.join('&#10;') + '</title>';
+      }
+
       // Cell background + border
       s += rect(cx, cy, g.cellW, g.cellH, cellBg, borderStroke, 0, 0.6);
 
@@ -436,7 +463,7 @@
         // Tint whole cell
         if (evs.length) {
           const first = categoryById(evs[0].categoryId);
-          if (first) s += rect(cx + 0.6, cy + 0.6, g.cellW - 1.2, g.cellH - 1.2, withAlpha(first.color, 0.16), null, 0);
+          if (first) s += rect(cx + 0.6, cy + 0.6, g.cellW - 1.2, g.cellH - 1.2, withAlpha(first.color, 0.16), null, 0, 'class="ev-tint"');
         }
 
         // Day number
@@ -461,7 +488,7 @@
           const n = Math.min(cats.length, 4);
           const stripeW = bw / n;
           for (let j = 0; j < n; j++) {
-            s += '<rect x="' + r2(bx + j * stripeW) + '" y="' + r2(by) + '" width="' + r2(stripeW - (j < n - 1 ? 1 : 0)) +
+            s += '<rect class="ev-band-stripe" x="' + r2(bx + j * stripeW) + '" y="' + r2(by) + '" width="' + r2(stripeW - (j < n - 1 ? 1 : 0)) +
               '" height="' + bandH + '" rx="1.5" fill="' + cats[j].color + '"/>';
           }
 
@@ -480,6 +507,9 @@
         const num = dayNum < 1 ? prevDim + dayNum : dayNum - dim;
         s += text(cx + 6, cy + 15, num, th.muted, 12, 400, 'start', 0.4);
       }
+
+      // Close interactive <g> wrapper
+      if (hasEvents && state.interactiveSvg !== false) s += '</g>';
     }
     return s;
   }
@@ -589,11 +619,12 @@
 
   /* ---------- SVG primitives ---------- */
   const r2 = (n) => Math.round(n * 100) / 100;
-  function rect(x, y, w, h, fill, stroke, r, sw) {
+  function rect(x, y, w, h, fill, stroke, r, sw, extra) {
     let s = '<rect x="' + r2(x) + '" y="' + r2(y) + '" width="' + r2(w) + '" height="' + r2(h) + '"';
     if (r) s += ' rx="' + r + '"';
     if (fill) s += ' fill="' + fill + '"'; else s += ' fill="none"';
     if (stroke) s += ' stroke="' + stroke + '" stroke-width="' + (sw || 1) + '"';
+    if (extra) s += ' ' + extra;
     return s + '/>';
   }
   function text(x, y, str, fill, size, weight, anchor, opacity) {
@@ -1029,6 +1060,7 @@
     $('#c-trailing').checked = state.trailingDays;
     $('#c-borders').checked = state.showBorders !== false;
     $('#c-watermark').checked = !!state.showWatermark;
+    $('#c-interactive').checked = state.interactiveSvg !== false;
     $('#c-fontscale').value = String(state.fontScale || 1);
     $('#c-todaycolor').value = state.todayColor || '#ffffff';
     $('#c-todaycolor-wrap').classList.toggle('hidden', !state.highlightToday);
@@ -1158,6 +1190,7 @@
     onCheck('#c-trailing', (v) => state.trailingDays = v);
     onCheck('#c-borders', (v) => state.showBorders = v);
     onCheck('#c-watermark', (v) => state.showWatermark = v);
+    onCheck('#c-interactive', (v) => state.interactiveSvg = v);
 
     // Palette apply
     $('#c-palette').addEventListener('change', (e) => {
