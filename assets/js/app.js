@@ -106,6 +106,7 @@
   const ymd = (y, m, d) => y + '-' + pad2(m + 1) + '-' + pad2(d);
   const daysInMonth = (y, m) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
   const firstWeekday = (y, m) => new Date(Date.UTC(y, m, 1)).getUTCDay();
+  const isLeapYear = (y) => ((y % 4 === 0) && (y % 100 !== 0)) || (y % 400 === 0);
   // All date arithmetic uses UTC for consistency; events and today must match.
   const todayKey = () => { const d = new Date(); return ymd(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()); };
 
@@ -260,7 +261,9 @@
       const borderStyle = state.showBorders ? '1px solid ' + th.line : 'none';
 
       html += '<div class="cal-month" style="background:' + th.month + ';border:' + borderStyle + '">';
-      html += '<div class="cal-month-name" style="color:' + th.header + '">' + esc(MONTHS[m] + ' ' + yr) + '</div>';
+      let mLabel = MONTHS[m] + ' ' + yr;
+      if (m === 1 && isLeapYear(yr)) mLabel += ' ⋈';
+      html += '<div class="cal-month-name" style="color:' + th.header + '">' + esc(mLabel) + '</div>';
       html += '<table><thead><tr>';
       for (let i = 0; i < 7; i++) {
         const wd = wk[i];
@@ -390,8 +393,10 @@
     const borderStroke = state.showBorders ? th.line : null;
     s += rect(x, y, innerW + g.monthPad * 2, g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2, th.month, borderStroke, 8);
 
-    // Month name
-    s += text(x + (innerW + g.monthPad * 2) / 2, innerY + (g.monthHead * 0.66), esc(MONTHS[m] + ' ' + yr), th.header, 15, 600, 'middle');
+    // Month name (append leap-year indicator for Feb in leap years)
+    let monthLabel = MONTHS[m] + ' ' + yr;
+    if (m === 1 && isLeapYear(yr)) monthLabel += ' \u22c8'; // ⋈ = leap year
+    s += text(x + (innerW + g.monthPad * 2) / 2, innerY + (g.monthHead * 0.66), esc(monthLabel), th.header, 15, 600, 'middle');
 
     // Weekday header
     const wRowY = innerY + g.monthHead;
@@ -616,22 +621,23 @@
   function flush() { if (renderQueued) { renderQueued = false; renderNow(); } }
 
   function renderNow() {
-    currentBuild = buildCalendar();
     if (state.interactiveView) {
+      // HTML mode: skip SVG build entirely for speed
       $('#preview-canvas').classList.add('hidden');
       $('#preview-html').classList.remove('hidden');
       $('#preview-html').innerHTML = buildHtmlCalendar();
-      applyZoom(); // still needed for the stage sizing context
+      updateDims();
+      save();
+      initTooltip();
     } else {
+      currentBuild = buildCalendar();
       $('#preview-html').classList.add('hidden');
       $('#preview-canvas').classList.remove('hidden');
       $('#preview-canvas').innerHTML = currentBuild.svg;
       applyZoom();
+      updateDims();
+      save();
     }
-    updateDims();
-    save();
-    // re-attach tooltip after HTML is in DOM
-    if (state.interactiveView) initTooltip();
   }
 
   function applyZoom() {
@@ -1248,12 +1254,30 @@
     if (!start && !end) { toast('Pick at least a start date'); return; }
     if (!start) start = end;
     if (!end) end = start;
-    if (end < start) { const t = start; start = end; end = t; }
+    if (end < start) {
+      const t = start; start = end; end = t;
+      toast('⚠ Start/end swapped — start must be before end');
+    }
     state.events.push({ id: nextId(), name: name, description: desc, categoryId: catId, start: start, end: end });
     $('#e-name').value = '';
     if ($('#e-desc')) $('#e-desc').value = '';
-    renderEvents(); render();
+    renderEvents();
+    renderNow(); // immediate render, not coalesced — user just added an event
     toast('Event added');
+  }
+
+  // Date field linking: when start changes, enforce end ≥ start
+  function linkDateFields() {
+    const sEl = $('#e-start');
+    const eEl = $('#e-end');
+    if (!sEl || !eEl) return;
+    sEl.addEventListener('change', () => {
+      if (sEl.value) eEl.setAttribute('min', sEl.value);
+      // If current end is before new start, clear it
+      if (eEl.value && eEl.value < sEl.value) {
+        eEl.value = sEl.value;
+      }
+    });
   }
 
   async function copySvg() {    flush();    try {
@@ -1303,6 +1327,7 @@
     populateSelects();
     syncInputsFromState();
     bind();
+    linkDateFields();
     renderNow();
   }
 
