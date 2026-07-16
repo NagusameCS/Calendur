@@ -84,8 +84,20 @@
   let state = load() || defaultState();
 
   /* ---------- Persistence ---------- */
+  let _saveQueued = false;
   function save() {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+    // Defer localStorage writes to idle time — avoids blocking the render path
+    if (_saveQueued) return;
+    _saveQueued = true;
+    const doSave = () => {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (e) {}
+      _saveQueued = false;
+    };
+    if (typeof requestIdleCallback !== 'undefined') {
+      requestIdleCallback(doSave, { timeout: 2000 });
+    } else {
+      setTimeout(doSave, 100);
+    }
   }
   function load() {
     try {
@@ -119,21 +131,31 @@
   /* ---------- Colour helpers ---------- */
   function hexToRgb(hex) {
     let h = hex.replace('#', '');
-    if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+    if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
     const n = parseInt(h, 16);
     return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255 };
   }
-  function luminance(hex) {
-    const { r, g, b } = hexToRgb(hex);
-    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  }
-  function readableOn(hex) { return luminance(hex) > 0.55 ? '#000000' : '#ffffff'; }
   function withAlpha(hex, a) {
-    const { r, g, b } = hexToRgb(hex);
-    return 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+    const h = hex.replace('#', '');
+    const n = h.length === 3
+      ? parseInt(h[0]+h[0]+h[1]+h[1]+h[2]+h[2], 16)
+      : parseInt(h, 16);
+    return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`;
   }
 
-  function categoryById(id) { return state.categories.find((c) => c.id === id) || null; }
+  // Category lookup cache — built once per render
+  let _catMap = null;
+  function buildCatMap() {
+    _catMap = new Map();
+    state.categories.forEach((c) => _catMap.set(c.id, c));
+  }
+  function categoryById(id) {
+    if (_catMap) {
+      const c = _catMap.get(id);
+      return c || null;
+    }
+    return state.categories.find((c) => c.id === id) || null;
+  }
 
   /* Pre-compute event index: Map<dateKey, Event[]> for O(1) day lookups.
    * This is rebuilt once per render instead of filtering events for every cell. */
@@ -181,6 +203,8 @@
     const months = Math.max(1, Math.min(36, state.months | 0));
     // Pre-compute event index for O(1) lookups during cell rendering
     buildEventIndex();
+    // Pre-compute category lookup map
+    buildCatMap();
     let cols = state.columns === 'auto'
       ? Math.max(1, Math.min(4, Math.ceil(Math.sqrt(months * 1.3))))
       : Math.max(1, Math.min(6, parseInt(state.columns, 10)));
@@ -281,6 +305,7 @@
     const th = THEMES[state.theme] || THEMES.noir;
     const months = Math.max(1, Math.min(36, state.months | 0));
     buildEventIndex();
+    buildCatMap();
     const tKey = todayKey();
     const wk = weekdayOrder();
     const todayCol = state.highlightToday ? (state.todayColor || th.today) : th.today;

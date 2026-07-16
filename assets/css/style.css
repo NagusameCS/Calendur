@@ -217,7 +217,7 @@ input[type="date"] { color-scheme: dark; }
 .cal-tooltip .tt-desc { color: var(--text-secondary); margin-top: 6px; font-size: 0.78rem; border-top: 1px solid #333; padding-top: 6px; }
 
 /* HTML calendar preview */
-.preview-html { width: fit-content; margin: 0 auto; }
+.preview-html { width: fit-content; margin: 0 auto; contain: content; }
 .preview-html .cal-html-grid { display: flex; flex-wrap: wrap; gap: 24px; justify-content: center; padding: 48px; box-sizing: content-box; }
 .preview-html .cal-month { border-radius: 8px; overflow: hidden; }
 .preview-html .cal-month-name { font-size: 15px; font-weight: 600; padding: 8px 14px 6px; text-align: center; }
@@ -337,6 +337,7 @@ input[type="date"] { color-scheme: dark; }
   transform-origin: top center;
   box-shadow: var(--shadow);
   transition: transform 0.15s ease;
+  contain: content;
 }
 .preview-canvas svg { display: block; }
 
