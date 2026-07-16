@@ -87,7 +87,25 @@
           <label class="check"><input type="checkbox" id="c-today" /> Highlight today</label>
           <label class="check"><input type="checkbox" id="c-labels" /> Event labels</label>
           <label class="check"><input type="checkbox" id="c-trailing" /> Trailing days</label>
+          <label class="check"><input type="checkbox" id="c-borders" checked /> Month borders</label>
+          <label class="check"><input type="checkbox" id="c-watermark" /> SVG credit line</label>
         </div>
+        <label class="field">
+          <span>Font size</span>
+          <select id="c-fontscale">
+            <option value="0.85">Compact</option>
+            <option value="1" selected>Normal</option>
+            <option value="1.15">Large</option>
+          </select>
+        </label>
+        <div class="field">
+          <span>Weekend days</span>
+          <div class="weekend-row" id="weekend-row"></div>
+        </div>
+        <label class="field" id="c-todaycolor-wrap">
+          <span>Today ring colour</span>
+          <input type="color" id="c-todaycolor" value="#ffffff" />
+        </label>
       </section>
 
       <!-- Categories -->
@@ -132,6 +150,13 @@
         <div id="event-list" class="event-list"></div>
       </section>
 
+      <!-- Notes -->
+      <section class="ctl-group">
+        <h2 class="ctl-title">Notes &amp; descriptions</h2>
+        <p class="ctl-hint">Add freeform descriptions, policies, or context about breaks and holidays. Appears at the bottom of the exported calendar.</p>
+        <textarea id="c-notes" class="notes-area" rows="5" placeholder="Example:&#10;&#10;Winter Break — December 21 through January 2. No classes.&#10;Spring Break — March 15–19. School offices remain open.&#10;&#10;All public holidays observed as per district calendar."></textarea>
+      </section>
+
       <!-- Export -->
       <section class="ctl-group">
         <h2 class="ctl-title">Export</h2>
@@ -165,7 +190,7 @@
       </section>
 
       <footer class="panel-foot">
-        <p>Design inspired by <a href="https://nagusamecs.github.io" target="_blank" rel="noopener">nagusamecs.github.io</a>. Built with vanilla JS — no dependencies, fully client-side.</p>
+        <p>Design inspired by <a href="https://nagusamecs.github.io" target="_blank" rel="noopener">nagusamecs.github.io</a> &mdash; aesthetic used with appreciation. Built with vanilla JS; no dependencies, no telemetry, fully client-side. Calendars are generated in your browser — nothing is ever uploaded.</p>
       </footer>
     </aside>
 

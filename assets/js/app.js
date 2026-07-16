@@ -11,15 +11,19 @@
   const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const STORAGE_KEY = 'calendur.state.v1';
 
-  // SVG geometry (in SVG user units)
+  // SVG geometry (in SVG user units — scaled by state.fontScale at build time)
   const G = {
     cellW: 46, cellH: 42,
     monthHead: 30, weekdayHead: 22, monthPad: 14,
     weeks: 6, gap: 24, margin: 48,
+    // returns a fresh object scaled by state.fontScale (called once per build)
+    scaled: function () {
+      const s = +(state.fontScale || 1);
+      if (s === 1) return { cellW: 46, cellH: 42, monthHead: 30, weekdayHead: 22, monthPad: 14, weeks: 6, gap: 24, margin: 48 };
+      const rnd = (v) => Math.round(v * s * 10) / 10;
+      return { cellW: rnd(46), cellH: rnd(42), monthHead: rnd(30), weekdayHead: rnd(22), monthPad: rnd(14), weeks: 6, gap: rnd(24), margin: rnd(48) };
+    }
   };
-  G.innerW = 7 * G.cellW;
-  G.blockW = G.innerW + G.monthPad * 2;
-  G.blockH = G.monthHead + G.weekdayHead + G.weeks * G.cellH + G.monthPad * 2;
 
   const THEMES = {
     noir:      { name: 'Noir (site match)', page: '#000000', month: '#0a0a0a', line: '#222222', text: '#ffffff', muted: '#666666', weekend: '#141414', header: '#ffffff', sub: '#999999', today: '#ffffff' },
@@ -47,6 +51,7 @@
     return {
       title: (y) + '\u2013' + (y + 1) + ' Academic Year',
       subtitle: '',
+      notes: '',
       year: y,
       startMonth: 8, // September
       months: 10,
@@ -57,6 +62,11 @@
       highlightToday: false,
       showLabels: false,
       trailingDays: false,
+      showBorders: true,
+      showWatermark: false,
+      fontScale: 1,
+      weekendDays: [0, 6], // Sun, Sat
+      todayColor: '#ffffff',
       categories: [
         { id: nextId(), label: 'Holiday', color: '#c62828' },
         { id: nextId(), label: 'Break',   color: '#1565c0' },
@@ -79,6 +89,11 @@
       if (!raw) return null;
       const s = JSON.parse(raw);
       if (!s || !Array.isArray(s.categories)) return null;
+      // Migrate old state: merge missing keys from fresh defaults
+      const fresh = defaultState();
+      for (const k of Object.keys(fresh)) {
+        if (!(k in s)) s[k] = fresh[k];
+      }
       return s;
     } catch (e) { return null; }
   }
@@ -137,8 +152,14 @@
     cols = Math.min(cols, months);
     const rows = Math.ceil(months / cols);
 
-    const gridW = cols * G.blockW + (cols - 1) * G.gap;
-    const totalW = gridW + G.margin * 2;
+    // Geometry scaled by fontScale
+    const g = G.scaled();
+    const innerW = 7 * g.cellW;
+    const blockW = innerW + g.monthPad * 2;
+    const blockH = g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2;
+
+    const gridW = cols * blockW + (cols - 1) * g.gap;
+    const totalW = gridW + g.margin * 2;
 
     // Header height
     let headH = 0;
@@ -148,16 +169,23 @@
     if (hasSub) headH += 26;
     if (hasTitle || hasSub) headH += 22;
 
-    const gridTop = G.margin + headH;
-    const gridH = rows * G.blockH + (rows - 1) * G.gap;
+    const gridTop = g.margin + headH;
+    const gridH = rows * blockH + (rows - 1) * g.gap;
 
     // Legend layout (below grid)
-    const legend = layoutLegend(gridW);
+    const legend = layoutLegend(gridW, g);
     const legendTop = gridTop + gridH + (state.categories.length ? 30 : 0);
-    const totalH = legendTop + legend.height + G.margin;
+
+    // Notes block (below legend)
+    const notesBlock = buildNotes(totalW, legendTop + legend.height + (state.categories.length ? 0 : 8), g, th);
+
+    // Watermark
+    const watermarkH = state.showWatermark ? 22 : 0;
+    const totalH = notesBlock.y + notesBlock.h + watermarkH + g.margin;
 
     const wk = weekdayOrder();
     const tKey = todayKey();
+    const todayCol = state.highlightToday ? (state.todayColor || th.today) : th.today;
 
     let body = '';
     // Background
@@ -165,10 +193,10 @@
 
     // Title / subtitle
     if (hasTitle) {
-      body += text(totalW / 2, G.margin + 30, esc(state.title), th.header, 30, 700, 'middle');
+      body += text(totalW / 2, g.margin + 30, esc(state.title), th.header, 30, 700, 'middle');
     }
     if (hasSub) {
-      const sy = G.margin + (hasTitle ? 60 : 26);
+      const sy = g.margin + (hasTitle ? 60 : 26);
       body += text(totalW / 2, sy, esc(state.subtitle), th.sub, 15, 500, 'middle');
     }
 
@@ -176,13 +204,20 @@
     for (let k = 0; k < months; k++) {
       const col = k % cols;
       const row = Math.floor(k / cols);
-      const bx = G.margin + col * (G.blockW + G.gap);
-      const by = gridTop + row * (G.blockH + G.gap);
-      body += buildMonth(bx, by, monthAt(k), th, wk, tKey);
+      const bx = g.margin + col * (blockW + g.gap);
+      const by = gridTop + row * (blockH + g.gap);
+      body += buildMonth(bx, by, monthAt(k), th, wk, tKey, todayCol, g);
     }
 
     // Legend
     body += legend.svg;
+    // Notes
+    body += notesBlock.svg;
+    // Watermark
+    if (state.showWatermark) {
+      body += text(totalW - g.margin, totalH - g.margin + 4,
+        'Made with Calendur \u00b7 nagusamecs.github.io', th.muted, 9, 400, 'end', 0.45);
+    }
 
     const svg =
       '<svg xmlns="http://www.w3.org/2000/svg" width="' + totalW + '" height="' + totalH +
@@ -200,28 +235,30 @@
     return arr;
   }
 
-  function buildMonth(x, y, ym, th, wk, tKey) {
+  function buildMonth(x, y, ym, th, wk, tKey, todayCol, g) {
     const { y: yr, m } = ym;
     let s = '';
-    const innerX = x + G.monthPad;
-    const innerY = y + G.monthPad;
+    const innerX = x + g.monthPad;
+    const innerY = y + g.monthPad;
+    const innerW = 7 * g.cellW;
 
-    // Block background
-    s += rect(x, y, G.blockW, G.blockH, th.month, th.line, 8);
+    // Block background (no border if showBorders is off)
+    const borderStroke = state.showBorders ? th.line : null;
+    s += rect(x, y, innerW + g.monthPad * 2, g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2, th.month, borderStroke, 8);
 
     // Month name
-    s += text(x + G.blockW / 2, innerY + 20, esc(MONTHS[m] + ' ' + yr), th.header, 15, 600, 'middle');
+    s += text(x + (innerW + g.monthPad * 2) / 2, innerY + (g.monthHead * 0.66), esc(MONTHS[m] + ' ' + yr), th.header, 15, 600, 'middle');
 
     // Weekday header
-    const wRowY = innerY + G.monthHead;
+    const wRowY = innerY + g.monthHead;
     for (let i = 0; i < 7; i++) {
-      const cx = innerX + i * G.cellW + G.cellW / 2;
-      const isWknd = wk[i] === 0 || wk[i] === 6;
-      s += text(cx, wRowY + 15, WEEKDAYS[wk[i]].toUpperCase().slice(0, 3), isWknd ? th.muted : th.sub, 9.5, 600, 'middle');
+      const cx = innerX + i * g.cellW + g.cellW / 2;
+      const isWknd = state.weekendDays && state.weekendDays.indexOf(wk[i]) !== -1;
+      s += text(cx, wRowY + (g.weekdayHead * 0.68), WEEKDAYS[wk[i]].toUpperCase().slice(0, 3), isWknd ? th.muted : th.sub, 9.5, 600, 'middle');
     }
 
     // Day grid
-    const gridY = wRowY + G.weekdayHead;
+    const gridY = wRowY + g.weekdayHead;
     const offset = (firstWeekday(yr, m) - state.weekStart + 7) % 7;
     const dim = daysInMonth(yr, m);
     const prevDim = daysInMonth(m === 0 ? yr - 1 : yr, (m + 11) % 12);
@@ -229,38 +266,37 @@
     for (let i = 0; i < 42; i++) {
       const col = i % 7;
       const rowN = Math.floor(i / 7);
-      const cx = innerX + col * G.cellW;
-      const cy = gridY + rowN * G.cellH;
+      const cx = innerX + col * g.cellW;
+      const cy = gridY + rowN * g.cellH;
       const dayNum = i - offset + 1;
       const inMonth = dayNum >= 1 && dayNum <= dim;
 
       const wd = wk[col];
-      const isWknd = wd === 0 || wd === 6;
+      const isWknd = state.weekendDays && state.weekendDays.indexOf(wd) !== -1;
 
       let cellBg = th.month;
       if (inMonth && state.shadeWeekend && isWknd) cellBg = th.weekend;
 
       // Cell background + border
-      s += rect(cx, cy, G.cellW, G.cellH, cellBg, th.line, 0, 0.6);
+      s += rect(cx, cy, g.cellW, g.cellH, cellBg, borderStroke, 0, 0.6);
 
       if (inMonth) {
         const key = ymd(yr, m, dayNum);
         const evs = eventsOn(key);
 
-        // Tint whole cell with first event colour for at-a-glance scanning
+        // Tint whole cell
         if (evs.length) {
           const first = categoryById(evs[0].categoryId);
-          if (first) s += rect(cx + 0.6, cy + 0.6, G.cellW - 1.2, G.cellH - 1.2, withAlpha(first.color, 0.16), null, 0);
+          if (first) s += rect(cx + 0.6, cy + 0.6, g.cellW - 1.2, g.cellH - 1.2, withAlpha(first.color, 0.16), null, 0);
         }
 
         // Day number
-        const numColor = th.text;
-        s += text(cx + 6, cy + 15, dayNum, numColor, 12, 500, 'start');
+        s += text(cx + 6, cy + 15, dayNum, th.text, 12, 500, 'start');
 
         // Today ring
         if (state.highlightToday && key === tKey) {
-          s += '<rect x="' + r2(cx + 1.5) + '" y="' + r2(cy + 1.5) + '" width="' + r2(G.cellW - 3) +
-            '" height="' + r2(G.cellH - 3) + '" rx="4" fill="none" stroke="' + th.today + '" stroke-width="1.6"/>';
+          s += '<rect x="' + r2(cx + 1.5) + '" y="' + r2(cy + 1.5) + '" width="' + r2(g.cellW - 3) +
+            '" height="' + r2(g.cellH - 3) + '" rx="4" fill="none" stroke="' + todayCol + '" stroke-width="1.6"/>';
         }
 
         // Colour band(s) at bottom
@@ -268,9 +304,9 @@
           const cats = [];
           evs.forEach((e) => { const c = categoryById(e.categoryId); if (c && !cats.find((x) => x.id === c.id)) cats.push(c); });
           const bandH = 7;
-          const by = cy + G.cellH - bandH - 2;
+          const by = cy + g.cellH - bandH - 2;
           const bx = cx + 3;
-          const bw = G.cellW - 6;
+          const bw = g.cellW - 6;
           const n = Math.min(cats.length, 4);
           const stripeW = bw / n;
           for (let j = 0; j < n; j++) {
@@ -285,12 +321,11 @@
               const label = starting[0].name || '';
               const c = categoryById(starting[0].categoryId);
               const short = clip(label, 9);
-              s += text(cx + G.cellW - 5, cy + 15, esc(short), c ? c.color : th.muted, 7.5, 700, 'end');
+              s += text(cx + g.cellW - 5, cy + 15, esc(short), c ? c.color : th.muted, 7.5, 700, 'end');
             }
           }
         }
       } else if (state.trailingDays) {
-        // faded leading/trailing days
         const num = dayNum < 1 ? prevDim + dayNum : dayNum - dim;
         s += text(cx + 6, cy + 15, num, th.muted, 12, 400, 'start', 0.4);
       }
@@ -300,7 +335,7 @@
 
   function clip(str, n) { return str.length > n ? str.slice(0, n - 1) + '\u2026' : str; }
 
-  function layoutLegend(availW) {
+  function layoutLegend(availW, g) {
     const cats = state.categories;
     if (!cats.length) return { svg: '', height: 0 };
     const th = THEMES[state.theme] || THEMES.noir;
@@ -317,15 +352,15 @@
       cur += w;
     });
 
-    const legendTop = G.margin + headerHeight() + gridHeight() + 30;
+    const legendTop = g.margin + headerHeight() + gridHeight(g) + 30;
     let svg = '';
     // Divider line above legend
-    svg += '<line x1="' + r2(G.margin) + '" y1="' + r2(legendTop - 14) + '" x2="' + r2(G.margin + availW) +
+    svg += '<line x1="' + r2(g.margin) + '" y1="' + r2(legendTop - 14) + '" x2="' + r2(g.margin + availW) +
       '" y2="' + r2(legendTop - 14) + '" stroke="' + th.line + '" stroke-width="1"/>';
 
     rows.forEach((rowItems, ri) => {
       const rowW = rowItems.reduce((a, it) => a + it.w, 0) - gapX;
-      let x = G.margin + (availW - rowW) / 2;
+      let x = g.margin + (availW - rowW) / 2;
       const y = legendTop + ri * itemH;
       rowItems.forEach((it) => {
         svg += '<rect x="' + r2(x) + '" y="' + r2(y + 2) + '" width="' + sw + '" height="' + sw + '" rx="3" fill="' + it.c.color + '"/>';
@@ -337,7 +372,50 @@
     return { svg: svg, height: rows.length * itemH };
   }
 
-  // Helpers reused by legend for total-height calc
+  // Build freeform notes block below the legend
+  function buildNotes(totalW, topY, g, th) {
+    const noteText = (state.notes || '').trim();
+    if (!noteText) return { svg: '', y: topY, h: 0 };
+    const lines = wrapLines(noteText, totalW - g.margin * 2, 11, totalW);
+    if (!lines.length) return { svg: '', y: topY, h: 0 };
+    const lineH = 18, pad = 16;
+    const h = lines.length * lineH + pad * 2 + 12; // 12 extra for label
+    let svg = '';
+    // Divider
+    svg += '<line x1="' + r2(g.margin) + '" y1="' + r2(topY + 6) + '" x2="' + r2(totalW - g.margin) +
+      '" y2="' + r2(topY + 6) + '" stroke="' + th.line + '" stroke-width="1"/>';
+    // Label
+    svg += text(g.margin + 4, topY + 22, 'Notes', th.muted, 10, 600, 'start', 0.7);
+    // Lines
+    for (let i = 0; i < lines.length; i++) {
+      svg += text(g.margin + 4, topY + 22 + pad + i * lineH + 2, esc(lines[i]), th.sub, 11, 400, 'start');
+    }
+    return { svg: svg, y: topY, h: h };
+  }
+
+  // Simple word-wrapping for notes (character-based, reasonable guess)
+  function wrapLines(str, maxW, fontSize, totalW) {
+    const charsPerLine = Math.floor(maxW / (fontSize * 0.6));
+    if (charsPerLine < 10) charsPerLine = 40;
+    const paragraphs = str.split(/\n/);
+    const lines = [];
+    paragraphs.forEach((para) => {
+      const words = para.split(/\s+/);
+      let cur = '';
+      words.forEach((w) => {
+        if (!w) return;
+        if ((cur + ' ' + w).trim().length > charsPerLine && cur.length) {
+          lines.push(cur.trim()); cur = w;
+        } else {
+          cur = cur ? cur + ' ' + w : w;
+        }
+      });
+      if (cur.trim()) lines.push(cur.trim());
+    });
+    return lines;
+  }
+
+  // Helpers reused by legend / notes for total-height calc
   function headerHeight() {
     let h = 0;
     const hasTitle = (state.title || '').trim().length > 0;
@@ -347,14 +425,15 @@
     if (hasTitle || hasSub) h += 22;
     return h;
   }
-  function gridHeight() {
+  function gridHeight(g) {
     const months = Math.max(1, Math.min(36, state.months | 0));
     let cols = state.columns === 'auto'
       ? Math.max(1, Math.min(4, Math.ceil(Math.sqrt(months * 1.3))))
       : Math.max(1, Math.min(6, parseInt(state.columns, 10)));
     cols = Math.min(cols, months);
     const rows = Math.ceil(months / cols);
-    return rows * G.blockH + (rows - 1) * G.gap;
+    const blockH = g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2;
+    return rows * blockH + (rows - 1) * g.gap;
   }
 
   /* ---------- SVG primitives ---------- */
@@ -504,6 +583,7 @@
   function syncInputsFromState() {
     $('#c-title').value = state.title;
     $('#c-subtitle').value = state.subtitle;
+    $('#c-notes').value = state.notes || '';
     $('#c-year').value = state.year;
     $('#c-start-month').value = state.startMonth;
     $('#c-months').value = state.months;
@@ -514,6 +594,12 @@
     $('#c-today').checked = state.highlightToday;
     $('#c-labels').checked = state.showLabels;
     $('#c-trailing').checked = state.trailingDays;
+    $('#c-borders').checked = state.showBorders !== false;
+    $('#c-watermark').checked = !!state.showWatermark;
+    $('#c-fontscale').value = String(state.fontScale || 1);
+    $('#c-todaycolor').value = state.todayColor || '#ffffff';
+    $('#c-todaycolor-wrap').classList.toggle('hidden', !state.highlightToday);
+    syncWeekendChips();
     renderCategories();
     renderEventCategoryOptions();
     renderEvents();
@@ -540,6 +626,27 @@
         renderCategories(); renderEventCategoryOptions(); renderEvents(); render();
       });
       list.appendChild(row);
+    });
+  }
+
+  function syncWeekendChips() {
+    const row = $('#weekend-row');
+    if (!row) return;
+    if (!Array.isArray(state.weekendDays)) state.weekendDays = [0, 6];
+    row.innerHTML = '';
+    [0,1,2,3,4,5,6].forEach((d) => {
+      const chip = document.createElement('span');
+      chip.className = 'weekend-chip' + (state.weekendDays.indexOf(d) !== -1 ? ' active' : '');
+      chip.textContent = WEEKDAYS[d].slice(0, 2);
+      chip.addEventListener('click', () => {
+        const idx = state.weekendDays.indexOf(d);
+        if (idx === -1) state.weekendDays.push(d);
+        else state.weekendDays.splice(idx, 1);
+        state.weekendDays.sort((a,b) => a-b);
+        syncWeekendChips();
+        render();
+      });
+      row.appendChild(chip);
     });
   }
 
@@ -580,16 +687,21 @@
     // Text/number/select fields
     on('#c-title', 'input', (v) => state.title = v);
     on('#c-subtitle', 'input', (v) => state.subtitle = v);
+    on('#c-notes', 'input', (v) => state.notes = v);
     on('#c-year', 'input', (v) => state.year = clampInt(v, 1, 9999, state.year));
     on('#c-start-month', 'change', (v) => state.startMonth = parseInt(v, 10));
     on('#c-months', 'input', (v) => state.months = clampInt(v, 1, 36, state.months));
     on('#c-columns', 'change', (v) => state.columns = v);
     on('#c-weekstart', 'change', (v) => state.weekStart = parseInt(v, 10));
     on('#c-theme', 'change', (v) => state.theme = v);
+    on('#c-fontscale', 'change', (v) => { state.fontScale = parseFloat(v) || 1; });
+    on('#c-todaycolor', 'input', (v) => { state.todayColor = v; });
     onCheck('#c-weekend', (v) => state.shadeWeekend = v);
-    onCheck('#c-today', (v) => state.highlightToday = v);
+    onCheck('#c-today', (v) => { state.highlightToday = v; $('#c-todaycolor-wrap').classList.toggle('hidden', !v); });
     onCheck('#c-labels', (v) => state.showLabels = v);
     onCheck('#c-trailing', (v) => state.trailingDays = v);
+    onCheck('#c-borders', (v) => state.showBorders = v);
+    onCheck('#c-watermark', (v) => state.showWatermark = v);
 
     // Palette apply
     $('#c-palette').addEventListener('change', (e) => {
