@@ -162,7 +162,8 @@
         <div class="event-toolbar">
           <input type="text" id="e-filter" class="event-filter" placeholder="Filter events…" />
           <button id="btn-quick-add" class="btn btn-ghost btn-sm" title="Quick-add common dates">⚡ Presets</button>
-          <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">📋 Import</button>
+          <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">📋 CSV</button>
+          <button id="btn-import-json" class="btn btn-ghost btn-sm" title="Paste or import JSON">📦 JSON</button>
           <button id="btn-import-gh" class="btn btn-ghost btn-sm" title="Import from a GitHub raw URL or repo">🐙 GitHub</button>
         </div>
         <div id="event-list" class="event-list"></div>
@@ -170,6 +171,11 @@
           <p class="ctl-hint">Paste CSV or tab-separated data. First row is a header (Name, Category, Start, End).</p>
           <textarea id="csv-text" class="csv-area" rows="5" placeholder="Name&#9;Category&#9;Start&#9;End&#10;Winter Break&#9;Break&#9;2026-12-21&#9;2027-01-02&#10;MLK Day&#9;Holiday&#9;2027-01-20"></textarea>
           <button id="btn-import-csv-go" class="btn btn-secondary btn-block">Import rows</button>
+        </div>
+        <div class="csv-panel hidden" id="json-panel">
+          <p class="ctl-hint">Paste a full Calendur .json config, or an array of events: <code>[{"name":"…","category":"…","start":"…","end":"…"}]</code></p>
+          <textarea id="json-text" class="csv-area" rows="6" placeholder='{"title":"2026–2027","categories":[{"label":"Holiday","color":"#c62828"}],"events":[{"name":"Winter Break","category":"Holiday","start":"2026-12-21","end":"2027-01-02"}]}'></textarea>
+          <button id="btn-import-json-go" class="btn btn-secondary btn-block">Import JSON</button>
         </div>
         <div class="preset-panel hidden" id="preset-panel">
           <p class="ctl-hint">Click to add common dates for this calendar year.</p>

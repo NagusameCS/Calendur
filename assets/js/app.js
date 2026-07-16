@@ -790,6 +790,15 @@
   }
 
   /* ---------- Bulk CSV import ---------- */
+  function togglePanel(id) {
+    const el = $('#' + id);
+    if (!el) return;
+    ['csv-panel','json-panel','preset-panel','gh-panel'].forEach((pid) => {
+      if (pid !== id) $('#' + pid)?.classList.add('hidden');
+    });
+    el.classList.toggle('hidden');
+  }
+
   function importCsv() {
     const raw = $('#csv-text').value.trim();
     if (!raw) { toast('Paste some data first'); return; }
@@ -823,6 +832,30 @@
     $('#csv-panel').classList.add('hidden');
     renderEvents(); render();
     toast('Imported ' + added + ' event' + (added !== 1 ? 's' : ''));
+  }
+
+  /* ---------- JSON paste import ---------- */
+  function importJsonText() {
+    const raw = ($('#json-text') ? $('#json-text').value.trim() : '');
+    if (!raw) { toast('Paste some JSON first'); return; }
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) {
+      toast('Invalid JSON — check syntax'); return;
+    }
+    if (parsed.categories && Array.isArray(parsed.categories)) {
+      // Full Calendur config
+      state = Object.assign(defaultState(), parsed);
+      syncInputsFromState(); render(); toast('Imported full calendar config');
+    } else if (Array.isArray(parsed)) {
+      importEventArray(parsed);
+    } else if (parsed.events && Array.isArray(parsed.events)) {
+      importEventArray(parsed.events);
+    } else {
+      toast('Unrecognized JSON — needs "categories" and/or "events" arrays, or be an event array');
+      return;
+    }
+    $('#json-text').value = '';
+    $('#json-panel').classList.add('hidden');
   }
 
   /* ---------- GitHub import ---------- */
@@ -1155,17 +1188,19 @@
 
     // Bulk CSV import toggle
     $('#btn-import-csv').addEventListener('click', () => {
-      $('#csv-panel').classList.toggle('hidden');
-      $('#preset-panel').classList.add('hidden');
-      $('#gh-panel').classList.add('hidden');
+      togglePanel('csv-panel');
     });
     $('#btn-import-csv-go').addEventListener('click', importCsv);
 
+    // JSON import toggle
+    $('#btn-import-json').addEventListener('click', () => {
+      togglePanel('json-panel');
+    });
+    $('#btn-import-json-go').addEventListener('click', importJsonText);
+
     // GitHub import toggle
     $('#btn-import-gh').addEventListener('click', () => {
-      $('#gh-panel').classList.toggle('hidden');
-      $('#csv-panel').classList.add('hidden');
-      $('#preset-panel').classList.add('hidden');
+      togglePanel('gh-panel');
     });
     $('#btn-import-gh-go').addEventListener('click', importFromGitHub);
 
@@ -1325,10 +1360,87 @@
   /* ---------- Init ---------- */
   function init() {
     populateSelects();
+    // Apply URL query parameters (API-like endpoint)
+    applyQueryParams();
     syncInputsFromState();
     bind();
     linkDateFields();
+    // If view-only mode, hide controls
+    if (isViewOnly()) enterViewOnly();
     renderNow();
+    // Auto-download if ?auto=1 is set
+    if (getParam('auto') === '1') {
+      // Use a short delay to let the SVG build, then download
+      setTimeout(() => {
+        if (getParam('format')) {
+          $('#x-format').value = getParam('format');
+          $('#x-format').dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        if (getParam('scale')) {
+          $('#x-scale').value = getParam('scale');
+          $('#x-scale').dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        flush();
+        doExport();
+        // Optional: redirect to remove params
+        if (getParam('redirect') === '1' || getParam('auto') === '1') {
+          setTimeout(() => { window.close ? window.close() : null; }, 1000);
+        }
+      }, 600);
+    }
+  }
+
+  // Parse ?year=2026&months=10&title=... and apply to state
+  function applyQueryParams() {
+    const p = getParam;
+    if (p('year'))       state.year = clampInt(p('year'), 1, 9999, state.year);
+    if (p('months'))     state.months = clampInt(p('months'), 1, 36, state.months);
+    if (p('start'))      state.startMonth = clampInt(p('start'), 0, 11, 0);
+    if (p('title'))      state.title = decodeURIComponent(p('title'));
+    if (p('subtitle'))   state.subtitle = decodeURIComponent(p('subtitle'));
+    if (p('theme'))      { const t = p('theme'); if (THEMES[t]) state.theme = t; }
+    if (p('weekstart'))  state.weekStart = p('weekstart') === '1' ? 1 : 0;
+    if (p('weekend'))    state.shadeWeekend = p('weekend') !== '0';
+    if (p('columns'))    state.columns = p('columns');
+    if (p('fontscale'))  state.fontScale = parseFloat(p('fontscale')) || 1;
+    if (p('borders'))    state.showBorders = p('borders') !== '0';
+    if (p('watermark'))  state.showWatermark = p('watermark') === '1';
+    if (p('today'))      state.highlightToday = p('today') === '1';
+    if (p('view'))       {} // handled separately
+  }
+
+  function getParam(name) {
+    const url = new URL(location.href);
+    return url.searchParams.get(name);
+  }
+
+  function isViewOnly() {
+    return getParam('view') === '1';
+  }
+
+  function enterViewOnly() {
+    const panel = document.querySelector('.panel');
+    const preview = document.querySelector('.preview');
+    const nav = document.querySelector('#navbar');
+    if (panel) panel.style.display = 'none';
+    if (nav) nav.style.display = 'none';
+    if (preview) preview.style.height = '100vh';
+    // Show a small overlay button to exit
+    const exitBtn = document.createElement('button');
+    exitBtn.id = 'exit-view-btn';
+    exitBtn.textContent = '✎ Edit';
+    exitBtn.style.cssText = 'position:fixed;top:12px;right:16px;z-index:9999;background:var(--text-primary);color:var(--bg-primary);border:none;padding:6px 14px;border-radius:6px;font-size:0.78rem;cursor:pointer;font-family:var(--font);';
+    exitBtn.addEventListener('click', () => {
+      document.querySelector('.panel').style.display = '';
+      document.querySelector('#navbar').style.display = '';
+      document.querySelector('.preview').style.height = '';
+      exitBtn.remove();
+      // Clean URL
+      const u = new URL(location.href);
+      u.searchParams.delete('view');
+      history.replaceState(null, '', u.toString());
+    });
+    document.body.appendChild(exitBtn);
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
