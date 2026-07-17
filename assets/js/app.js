@@ -603,7 +603,13 @@
     }
 
 
-    // Week number column
+    // Day grid
+    const gridY = wRowY + g.weekdayHead;
+    const offset = (firstWeekday(yr, m) - state.weekStart + 7) % 7;
+    const dim = daysInMonth(yr, m);
+    const prevDim = daysInMonth(m === 0 ? yr - 1 : yr, (m + 11) % 12);
+
+    // Week number column (rendered before cells so they appear on the left)
     if (state.showWeekNumbers) {
       var prevWeek = 0;
       for (var wi = 0; wi < 42; wi++) {
@@ -620,11 +626,6 @@
       }
     }
 
-    // Day grid
-    const gridY = wRowY + g.weekdayHead;
-    const offset = (firstWeekday(yr, m) - state.weekStart + 7) % 7;
-    const dim = daysInMonth(yr, m);
-    const prevDim = daysInMonth(m === 0 ? yr - 1 : yr, (m + 11) % 12);
 
     for (let i = 0; i < 42; i++) {
       const col = i % 7;
