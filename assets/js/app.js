@@ -1424,7 +1424,7 @@
         '<button class="event-del" title="Remove" aria-label="Remove">\u00d7</button>';
       item.querySelector('.event-dup').addEventListener('click', (e) => {
         e.stopPropagation();
-        state.events.push({ id: nextId(), name: ev.name + ' (copy)', description: ev.description || '', categoryId: ev.categoryId, start: ev.start, end: ev.end });
+        state.events.push({ id: nextId(), name: ev.name + ' (copy)', description: ev.description || '', repeat: ev.repeat || 'none', categoryId: ev.categoryId, start: ev.start, end: ev.end });
         renderEvents(); render(); toast('Event duplicated');
       });
       item.querySelector('.event-del').addEventListener('click', () => {
@@ -1588,6 +1588,7 @@
     const name = $('#e-name').value.trim();
     const catId = $('#e-category').value;
     const desc = ($('#e-desc') ? $('#e-desc').value.trim() : '');
+    const repeatVal = ($('#e-repeat') ? $('#e-repeat').value : 'none');
     let start = $('#e-start').value;
     let end = $('#e-end').value;
     if (!catId) { toast('Add a colour code first'); return; }
@@ -1598,7 +1599,7 @@
       const t = start; start = end; end = t;
       toast('Dates swapped — start must be before end');
     }
-    state.events.push({ id: nextId(), name: name, description: desc, repeat: repeat, categoryId: catId, start: start, end: end });
+    state.events.push({ id: nextId(), name: name, description: desc, repeat: repeatVal, categoryId: catId, start: start, end: end });
     $('#e-name').value = '';
     if ($('#e-desc')) $('#e-desc').value = '';
     renderEvents();
