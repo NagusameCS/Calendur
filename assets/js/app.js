@@ -550,6 +550,42 @@
     return html;
   }
 
+  /** Build a fully standalone HTML document (for download). */
+  function buildStandaloneHtml() {
+    var body = buildHtmlCalendar();
+    var th = THEMES[state.theme] || THEMES.noir;
+    var bg = th.page;
+    var fg = th.text;
+    return '<!DOCTYPE html>\n<html lang="' + (state.language || 'en') + '">\n<head>\n' +
+      '<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
+      '<title>' + esc(state.title || 'Calendar') + '</title>\n' +
+      '<style>\n' +
+      '*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}\n' +
+      'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;' +
+      'background:' + bg + ';color:' + fg + ';display:flex;justify-content:center;padding:20px}\n' +
+      '.cal-html-grid{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;max-width:1400px}\n' +
+      '.cal-month{border-radius:8px;overflow:hidden}\n' +
+      '.cal-month-name{font-size:15px;font-weight:600;padding:8px 14px 6px;text-align:center}\n' +
+      '.cal-month table{border-collapse:collapse;width:100%}\n' +
+      '.cal-month th{font-size:9.5px;font-weight:600;padding:4px 0;text-align:center;width:46px}\n' +
+      '.cal-month th.wk-col-hdr{width:20px;font-size:8px}\n' +
+      '.cal-month td{width:46px;height:42px;text-align:center;vertical-align:top;font-size:12px;font-weight:500;padding:4px 2px;position:relative}\n' +
+      '.cal-month td.wk-num{width:20px;font-size:8px;opacity:0.55;text-align:right;padding-right:4px}\n' +
+      '.cal-month td .day-num{display:block;line-height:1}\n' +
+      '.cal-month td .event-band{position:absolute;bottom:3px;left:3px;right:3px;height:7px;border-radius:1.5px;display:flex;overflow:hidden}\n' +
+      '.cal-month td .event-band span{flex:1;height:100%}\n' +
+      '.cal-title{text-align:center;font-size:30px;font-weight:700;padding-top:24px}\n' +
+      '.cal-subtitle{text-align:center;font-size:15px;font-weight:500;padding-bottom:8px}\n' +
+      '.cal-legend{display:flex;gap:26px;justify-content:center;flex-wrap:wrap;padding:16px 48px 20px;font-size:12px;border-top:1px solid}\n' +
+      '.cal-legend span{display:flex;align-items:center;gap:8px}\n' +
+      '.cal-legend .lg-swatch{width:14px;height:14px;border-radius:3px;flex-shrink:0}\n' +
+      '.cal-notes{padding:16px 48px 30px;font-size:11px;line-height:1.7;max-width:700px;margin:0 auto}\n' +
+      '.cal-watermark{text-align:right;padding:8px 48px 30px;font-size:9px;opacity:0.45}\n' +
+      '.cal-term-divider{width:100%;text-align:center;font-size:13px;font-weight:600;padding:6px 0;border-top:1px dashed;margin:4px 0}\n' +
+      '@media print{@page{margin:0.25in}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}\n' +
+      '</style>\n</head>\n<body>\n' + body + '\n</body>\n</html>';
+  }
+
   /* Tooltip handler for HTML calendar */
   function initTooltip() {
     const tip = $('#cal-tooltip');
@@ -859,6 +895,8 @@
   let currentBuild = null;
   let zoom = 1, autoFit = true;
   let renderQueued = false;
+  var _panX = 0, _panY = 0;
+  var _panning = false, _panStartX = 0, _panStartY = 0, _panOrigX = 0, _panOrigY = 0;
 
   // Coalesce rapid state changes (typing, colour dragging) into one paint per
   // animation frame instead of rebuilding the whole SVG on every keystroke.
@@ -878,6 +916,7 @@
       $('#preview-html').classList.remove('hidden');
       $('#preview-html').innerHTML = buildHtmlCalendar();
       persistHighlight();
+      applyTransform();
       updateDims();
       save();
       initTooltip();
@@ -886,30 +925,42 @@
       $('#preview-html').classList.add('hidden');
       $('#preview-canvas').classList.remove('hidden');
       $('#preview-canvas').innerHTML = currentBuild.svg;
-      applyZoom();
+      applyTransform();
       persistHighlight();
       updateDims();
       save();
     }
   }
 
-  function applyZoom() {
-    const canvas = $('#preview-canvas');
-    const svg = canvas.querySelector('svg');
-    if (!svg) return;
+  function applyTransform() {
+    var el = state.interactiveView ? $('#preview-html') : $('#preview-canvas');
+    if (!el) return;
     if (autoFit) {
-      const stage = $('#preview-stage');
-      const avail = stage.clientWidth - 64;
-      zoom = Math.min(1, avail / currentBuild.width);
+      var stage = $('#preview-stage');
+      var availW = stage.clientWidth - 64, availH = stage.clientHeight - 64;
+      var fitZoom = state.interactiveView
+        ? Math.min(1, availW / (el.scrollWidth || 800))
+        : Math.min(1, availW / (currentBuild && currentBuild.width || 800));
+      zoom = fitZoom;
+      _panX = 0; _panY = 0;
+      // Disable transition during auto-fit
+      el.style.transition = 'none';
+      requestAnimationFrame(function() {
+        el.style.transform = 'translate(0px, 0px) scale(' + zoom + ')';
+        el.style.transformOrigin = 'top left';
+        requestAnimationFrame(function() { el.style.transition = ''; });
+      });
+      return;
     }
-    svg.style.width = (currentBuild.width * zoom) + 'px';
-    svg.style.height = (currentBuild.height * zoom) + 'px';
+    el.style.transition = '';
+    el.style.transform = 'translate(' + _panX + 'px, ' + _panY + 'px) scale(' + zoom + ')';
+    el.style.transformOrigin = 'top left';
   }
 
   function updateDims() {
     const fmt = $('#x-format').value;
     let scale = 1;
-    if (fmt !== 'svg') {
+    if (fmt !== 'svg' && fmt !== 'html' && fmt !== 'ics') {
       const sv = $('#x-scale').value;
       scale = scaleFor(sv);
     }
@@ -918,6 +969,8 @@
     const label = $('#x-scale option:checked').textContent;
     $('#x-dims').textContent = fmt === 'svg'
       ? 'Vector \u2014 scales to any size (' + (currentBuild && currentBuild.width || 0) + '\u00d7' + (currentBuild && currentBuild.height || 0) + ' base).'
+      : fmt === 'html' || fmt === 'ics'
+      ? 'Standalone file \u2014 ready to open in any browser.'
       : 'Output: ' + w + '\u00d7' + h + ' px (' + label + ')';
   }
 
@@ -996,6 +1049,12 @@
     if (fmt === 'svg') {
       downloadBlob(new Blob([svgString()], { type: 'image/svg+xml;charset=utf-8' }), safeName() + '.svg');
       toast('Downloaded SVG');
+      return;
+    }
+    if (fmt === 'html') {
+      var htmlDoc = buildStandaloneHtml();
+      downloadBlob(new Blob([htmlDoc], { type: 'text/html;charset=utf-8' }), safeName() + '.html');
+      toast('Downloaded HTML');
       return;
     }
     const sv = $('#x-scale').value;
@@ -1557,8 +1616,9 @@ function downloadQr() {
     // Export controls
     $('#x-format').addEventListener('change', () => {
       const isSvg = $('#x-format').value === 'svg';
-      $('#x-scale-wrap').classList.toggle('hidden', isSvg);
-      if (isSvg) $('#x-width-wrap').classList.add('hidden');
+      const isRaster = $('#x-format').value !== 'svg' && $('#x-format').value !== 'html' && $('#x-format').value !== 'ics';
+      $('#x-scale-wrap').classList.toggle('hidden', !isRaster);
+      if (!isRaster) $('#x-width-wrap').classList.add('hidden');
       else $('#x-width-wrap').classList.toggle('hidden', $('#x-scale').value !== 'custom');
       updateDims();
     });
@@ -1584,10 +1644,10 @@ function downloadQr() {
       $('#btn-view-mode').style.color = state.interactiveView ? 'var(--bg-primary)' : '';
       render();
     });
-    $('#zoom-in').addEventListener('click', () => { autoFit = false; zoom = Math.min(4, zoom * 1.2); applyZoom(); });
-    $('#zoom-out').addEventListener('click', () => { autoFit = false; zoom = Math.max(0.1, zoom / 1.2); applyZoom(); });
-    $('#zoom-fit').addEventListener('click', () => { autoFit = true; applyZoom(); });
-    window.addEventListener('resize', () => { if (autoFit) applyZoom(); });
+    $('#zoom-in').addEventListener('click', () => { autoFit = false; zoom = Math.min(4, zoom * 1.2); applyTransform(); });
+    $('#zoom-out').addEventListener('click', () => { autoFit = false; zoom = Math.max(0.1, zoom / 1.2); applyTransform(); });
+    $('#zoom-fit').addEventListener('click', () => { _panX = 0; _panY = 0; autoFit = true; applyTransform(); });
+    window.addEventListener('resize', () => { if (autoFit) applyTransform(); });
 
     // Keyboard shortcuts
     window.addEventListener('keydown', (e) => {
@@ -1715,28 +1775,40 @@ function downloadQr() {
     stage.addEventListener('mousedown', function(e) {
       var cell = e.target.closest('[data-date]');
       if (!cell) {
-        // Clicked empty space → clear all
+        // Clicked empty space → clear selection or start panning
         if (!e.shiftKey) { clearPersistHighlight(); _persistRanges = []; updateFormFromRanges(); }
+        // Start panning
+        _panning = true; autoFit = false;
+        _panStartX = e.clientX; _panStartY = e.clientY;
+        _panOrigX = _panX; _panOrigY = _panY;
+        stage.style.cursor = 'grabbing';
+        e.preventDefault();
         return;
       }
+      // Click on a calendar cell → selection behavior (not panning)
       var date = cell.getAttribute('data-date');
       if (!date) return;
 
       _dragIsShift = e.shiftKey;
 
       if (!e.shiftKey) {
-        // Normal click/drag: clear all previous and start fresh
         clearPersistHighlight();
         _persistRanges = [];
       }
-      // Shift: keep existing ranges, will append the new block on mouseup
 
       _dragStart = date; _dragCurrent = date; _dragging = true;
       highlightDragRange(date, date);
       e.preventDefault();
     });
 
+    // Shared mousemove: handles both cell-drag (selection) and panning
     stage.addEventListener('mousemove', function(e) {
+      if (_panning) {
+        _panX = _panOrigX + (e.clientX - _panStartX);
+        _panY = _panOrigY + (e.clientY - _panStartY);
+        applyTransform();
+        return;
+      }
       if (!_dragging) return;
       var cell = e.target.closest('[data-date]');
       if (!cell) return;
@@ -1746,7 +1818,13 @@ function downloadQr() {
       highlightDragRange(_dragStart, _dragCurrent);
     });
 
+    // Shared mouseup: ends either cell-drag or panning
     stage.addEventListener('mouseup', function(e) {
+      if (_panning) {
+        _panning = false;
+        stage.style.cursor = '';
+        return;
+      }
       if (!_dragging) return;
       _dragging = false;
       clearDragHighlight();
@@ -1756,10 +1834,8 @@ function downloadQr() {
       var newBlock = { start: s, end: ed || s };
 
       if (_dragIsShift) {
-        // Append a disjoint block to existing selection
         _persistRanges.push(newBlock);
       } else {
-        // Replace — start a fresh isolated selection
         _persistRanges = [newBlock];
       }
 
@@ -1772,7 +1848,26 @@ function downloadQr() {
 
     stage.addEventListener('mouseleave', function() {
       if (_dragging) { _dragging = false; clearDragHighlight(); _dragStart = null; }
+      if (_panning) { _panning = false; stage.style.cursor = ''; }
     });
+
+    // Wheel zoom (Ctrl+scroll or trackpad pinch)
+    stage.addEventListener('wheel', function(e) {
+      if (!e.ctrlKey && !e.metaKey) return; // let normal scroll pass through
+      e.preventDefault();
+      autoFit = false;
+      var rect = stage.getBoundingClientRect();
+      var mx = e.clientX - rect.left;
+      var my = e.clientY - rect.top;
+      var factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+      var newZoom = Math.max(0.1, Math.min(4, zoom * factor));
+      // Zoom toward cursor position
+      var scaleChange = newZoom / zoom;
+      _panX = mx - scaleChange * (mx - _panX);
+      _panY = my - scaleChange * (my - _panY);
+      zoom = newZoom;
+      applyTransform();
+    }, { passive: false });
 
     // Initial persistent highlight if form has dates
     updatePersistFromForm();
