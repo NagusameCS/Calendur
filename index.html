@@ -91,11 +91,16 @@
           <label class="check"><input type="checkbox" id="c-today" /> Highlight today</label>
           <label class="check"><input type="checkbox" id="c-labels" /> Event labels</label>
           <label class="check"><input type="checkbox" id="c-trailing" /> Trailing days</label>
+          <label class="check"><input type="checkbox" id="c-weeknums" /> Week numbers</label>
           <label class="check"><input type="checkbox" id="c-borders" checked /> Month borders</label>
           <label class="check"><input type="checkbox" id="c-watermark" /> SVG credit line</label>
           <label class="check"><input type="checkbox" id="c-interactive" checked /> Interactive SVG hover</label>
           <label class="check"><input type="checkbox" id="c-qr" /> QR code in corner</label>
         </div>
+        <label class="field">
+          <span>Term labels</span>
+          <input type="text" id="c-terms" placeholder="Fall Semester; Spring Semester" />
+        </label>
         <label class="field">
           <span>Font size</span>
           <select id="c-fontscale">
@@ -209,6 +214,7 @@
           <label class="field">
             <span>Format</span>
             <select id="x-format">
+              <option value="ics">ICS (iCalendar)</option>
               <option value="svg">SVG (vector)</option>
               <option value="png">PNG</option>
               <option value="jpg">JPG</option>

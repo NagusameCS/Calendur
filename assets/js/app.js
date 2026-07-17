@@ -92,6 +92,8 @@
       interactiveView: false,
       interactiveSvg: true,  // embed hover tooltips in SVG exports
       showQr: false,
+      showWeekNumbers: false,
+      termLabels: [],
       categories: [
         { id: nextId(), label: 'Holiday', color: '#c62828' },
         { id: nextId(), label: 'Break',   color: '#1565c0' },
@@ -217,6 +219,16 @@
   /* ---------- XML escape ---------- */
   function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  /* ---------- Week numbers ---------- */
+  // ISO 8601 week number. Week 1 is the week with the first Thursday.
+  function isoWeekNum(y, m, d) {
+    var date = new Date(Date.UTC(y, m, d));
+    date.setUTCDate(date.getUTCDate() + 3 - (date.getUTCDay() + 6) % 7);
+    var week1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 4));
+    week1.setUTCDate(week1.getUTCDate() + 3 - (week1.getUTCDay() + 6) % 7);
+    return 1 + Math.round((date - week1) / 604800000);
   }
 
   /* ============================================================================
@@ -533,6 +545,24 @@
       const cx = innerX + i * g.cellW + g.cellW / 2;
       const isWknd = state.weekendDays && state.weekendDays.indexOf(wk[i]) !== -1;
       push(text(cx, wRowY + (g.weekdayHead * 0.68), localeWeekdays()[wk[i]], isWknd ? th.muted : th.sub, 9.5, 600, 'middle'));
+    }
+
+
+    // Week number column
+    if (state.showWeekNumbers) {
+      var prevWeek = 0;
+      for (var wi = 0; wi < 42; wi++) {
+        var wday = wi - offset + 1;
+        if (wday >= 1 && wday <= dim) {
+          var wkNum = isoWeekNum(yr, m, wday);
+          if (wkNum !== prevWeek) {
+            var wrow = Math.floor(wi / 7);
+            var wy = gridY + wrow * g.cellH;
+            push(text(innerX - 16, wy + 13, wkNum, th.muted, 8, 400, 'end'));
+            prevWeek = wkNum;
+          }
+        }
+      }
     }
 
     // Day grid
@@ -872,6 +902,12 @@
   async function doExport() {
     flush();
     const fmt = $('#x-format').value;
+    if (fmt === 'ics') {
+      var ics = generateIcs();
+      downloadBlob(new Blob([ics], { type: 'text/calendar;charset=utf-8' }), safeName() + '.ics');
+      toast('Downloaded ICS');
+      return;
+    }
     if (fmt === 'svg') {
       downloadBlob(new Blob([svgString()], { type: 'image/svg+xml;charset=utf-8' }), safeName() + '.svg');
       toast('Downloaded SVG');
@@ -1217,6 +1253,8 @@
     $('#c-today').checked = state.highlightToday;
     $('#c-labels').checked = state.showLabels;
     $('#c-trailing').checked = state.trailingDays;
+    $('#c-weeknums').checked = !!state.showWeekNumbers;
+    $('#c-terms').value = (state.termLabels || []).join('; ');
     $('#c-borders').checked = state.showBorders !== false;
     $('#c-watermark').checked = !!state.showWatermark;
     $('#c-interactive').checked = state.interactiveSvg !== false;
@@ -1350,6 +1388,8 @@
     onCheck('#c-today', (v) => { state.highlightToday = v; $('#c-todaycolor-wrap').classList.toggle('hidden', !v); });
     onCheck('#c-labels', (v) => state.showLabels = v);
     onCheck('#c-trailing', (v) => state.trailingDays = v);
+    onCheck('#c-weeknums', (v) => state.showWeekNumbers = v);
+    $('#c-terms').addEventListener('input', function(e) { state.termLabels = e.target.value.split(';').map(function(s){return s.trim()}).filter(Boolean); render(); });
     onCheck('#c-borders', (v) => state.showBorders = v);
     onCheck('#c-watermark', (v) => state.showWatermark = v);
     onCheck('#c-interactive', (v) => state.interactiveSvg = v);
@@ -1629,6 +1669,8 @@
     if (p('fontscale'))  { const fs = parseFloat(p('fontscale')); if (fs > 0 && fs <= 2) state.fontScale = fs; }
     if (p('borders'))    state.showBorders = p('borders') !== '0';
     if (p('watermark'))  state.showWatermark = p('watermark') === '1';
+    if (p('weeknums')) state.showWeekNumbers = p('weeknums') === '1';
+    if (p('terms')) state.termLabels = p('terms').split(';').map(function(s){return s.trim()}).filter(Boolean);
     if (p('today'))      state.highlightToday = p('today') === '1';
     if (p('labels'))     state.showLabels = p('labels') === '1';
     if (p('trailing'))   state.trailingDays = p('trailing') === '1';
