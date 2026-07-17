@@ -71,6 +71,7 @@
       eventFilter: '',
       interactiveView: false,
       interactiveSvg: true,  // embed hover tooltips in SVG exports
+      showQr: false,
       categories: [
         { id: nextId(), label: 'Holiday', color: '#c62828' },
         { id: nextId(), label: 'Break',   color: '#1565c0' },
@@ -247,7 +248,10 @@
 
     // Watermark
     const watermarkH = state.showWatermark ? 22 : 0;
-    const totalH = notesBlock.y + notesBlock.h + watermarkH + g.margin;
+
+    // QR code (if enabled) — reserve space at bottom
+    var qrH = state.showQr ? 80 + g.margin : 0;
+    var totalH = notesBlock.y + notesBlock.h + watermarkH + qrH + g.margin;
 
     const wk = weekdayOrder();
     const tKey = todayKey();
@@ -295,6 +299,23 @@
     if (state.showWatermark) {
       p(text(totalW - g.margin, totalH - g.margin + 4,
         'Made with Calendur', th.muted, 9, 400, 'end', 0.45));
+    }
+
+    // QR code in bottom-left corner
+    // QR code
+    if (state.showQr) {
+      try {
+        var qrUrl = 'https://nagusamecs.github.io/Calendur/';
+        var qrJson = JSON.stringify({ categories: state.categories, events: state.events, notes: state.notes });
+        try { qrUrl += '#cfg=' + btoa(unescape(encodeURIComponent(qrJson))); } catch (e) {}
+        var qs = 80;
+        p('<g transform="translate(' + r2(g.margin) + ',' + r2(totalH - g.margin - qs) + ')">' +
+          '<rect x="-4" y="-4" width="' + (qs + 8) + '" height="' + (qs + 8) + '" fill="' + th.page + '" rx="4"/>' +
+          '<image x="0" y="0" width="' + qs + '" height="' + qs + '" ' +
+          'href="https://api.qrserver.com/v1/create-qr-code/?size=' + qs + 'x' + qs + '&data=' + encodeURIComponent(qrUrl) + '" ' +
+          'preserveAspectRatio="none"/>' +
+          '</g>');
+      } catch (e) {}
     }
 
     const svg =
@@ -1176,6 +1197,7 @@
     $('#c-borders').checked = state.showBorders !== false;
     $('#c-watermark').checked = !!state.showWatermark;
     $('#c-interactive').checked = state.interactiveSvg !== false;
+    $('#c-qr').checked = !!state.showQr;
     $('#c-fontscale').value = String(state.fontScale || 1);
     $('#c-todaycolor').value = state.todayColor || '#ffffff';
     $('#c-todaycolor-wrap').classList.toggle('hidden', !state.highlightToday);
@@ -1306,6 +1328,7 @@
     onCheck('#c-borders', (v) => state.showBorders = v);
     onCheck('#c-watermark', (v) => state.showWatermark = v);
     onCheck('#c-interactive', (v) => state.interactiveSvg = v);
+    onCheck('#c-qr', (v) => state.showQr = v);
 
     // Palette apply
     $('#c-palette').addEventListener('change', (e) => {
