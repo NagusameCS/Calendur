@@ -277,7 +277,7 @@
 
     // Geometry scaled by fontScale
     const g = G.scaled();
-    const innerW = 7 * g.cellW;
+    const innerW = 7 * g.cellW + (state.showWeekNumbers ? 20 : 0);
     const blockW = innerW + g.monthPad * 2;
     const blockH = g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2;
 
@@ -338,14 +338,34 @@
       p(text(totalW / 2, sy, esc(state.subtitle), th.sub, 15, 500, 'middle'));
     }
 
-    // Month blocks
+
+    // Month blocks with term label dividers
+    var terms = state.termLabels || [];
+    var termDivs = [];
+    if (terms.length > 1) {
+      var monthsPerTerm = Math.ceil(months / terms.length);
+      for (var ti = 0; ti < terms.length - 1; ti++) {
+        var afterRow = Math.floor(((ti + 1) * monthsPerTerm - 1) / cols);
+        termDivs.push({ row: afterRow, label: terms[ti + 1] });
+      }
+    }
     for (let k = 0; k < months; k++) {
       const col = k % cols;
       const row = Math.floor(k / cols);
       const bx = g.margin + col * (blockW + g.gap);
       const by = gridTop + row * (blockH + g.gap);
+      // Check for term divider before this row
+      for (var td = 0; td < termDivs.length; td++) {
+        if (termDivs[td].row === row && col === 0 && td.drawn !== true) {
+          var divY = by - g.gap / 2;
+          p('<line x1="' + r2(g.margin) + '" y1="' + r2(divY) + '" x2="' + r2(totalW - g.margin) + '" y2="' + r2(divY) + '" stroke="' + th.line + '" stroke-width="1.5" stroke-dasharray="6,3"/>');
+          p(text(totalW / 2, divY - 6, esc(termDivs[td].label), th.sub, 13, 600, 'middle'));
+          termDivs[td].drawn = true;
+        }
+      }
       p(buildMonth(bx, by, monthAt(k), th, wk, tKey, todayCol, g));
     }
+
 
     // Legend
     p(legend.svg);
@@ -552,7 +572,7 @@
     const push = parts.push.bind(parts);
     const innerX = x + g.monthPad;
     const innerY = y + g.monthPad;
-    const innerW = 7 * g.cellW;
+    const innerW = 7 * g.cellW + (state.showWeekNumbers ? 20 : 0);
 
     // Block background
     const borderStroke = state.showBorders ? th.line : null;
@@ -872,14 +892,24 @@
       : 'Output: ' + w + '\u00d7' + h + ' px (' + label + ')';
   }
 
+
   function scaleFor(sv) {
     if (sv === 'custom') return parseFloat($('#x-width').value) / (currentBuild && currentBuild.width || 1);
     if (sv === 'a4')    return 2480 / (currentBuild && currentBuild.width || 1);
     if (sv === 'letter') return 2550 / (currentBuild && currentBuild.width || 1);
     if (sv === 'tabloid') return 3300 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'a3')    return 3508 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'legal') return 2550 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'hd')    return 1920 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'fhd')   return 1920 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'qhd')   return 2560 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'uhd')   return 3840 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'mac14') return 3024 / (currentBuild && currentBuild.width || 1);
+    if (sv === 'mac16') return 3456 / (currentBuild && currentBuild.width || 1);
     const n = parseFloat(sv);
     return isFinite(n) ? n : 1;
   }
+
 
   /* ============================================================================
    * EXPORT
