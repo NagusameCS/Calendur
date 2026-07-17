@@ -550,19 +550,87 @@
     return html;
   }
 
-  /** Build a fully standalone HTML document (for download). */
+  /** Build a fully standalone HTML document with sidebar, timeline, and fuzzy search. */
   function buildStandaloneHtml() {
     var body = buildHtmlCalendar();
     var th = THEMES[state.theme] || THEMES.noir;
     var bg = th.page;
     var fg = th.text;
+    var muted = th.muted;
+    var sub = th.sub;
+    var line = th.line;
+    var cardBg = state.theme === 'paper' || state.theme === 'mono' || state.theme === 'cream'
+      ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.04)';
+
+    // Build timeline HTML server-side
+    var sorted = state.events.slice().sort(function(a, b) { return a.start.localeCompare(b.start); });
+    var timelineRows = '';
+    if (sorted.length === 0) {
+      timelineRows = '<div class="tl-empty">No events yet.</div>';
+    } else {
+      sorted.forEach(function(ev, idx) {
+        var cat = categoryById(ev.categoryId);
+        var range = ev.start === ev.end ? ev.start : ev.start + ' \u2192 ' + ev.end;
+        timelineRows += '<div class="tl-card" data-ev-idx="' + idx + '" data-name="' + esc((ev.name||'').toLowerCase()) + '" data-cat="' + esc((cat?cat.label:'').toLowerCase()) + '" data-desc="' + esc((ev.description||'').toLowerCase()) + '" data-dates="' + esc(ev.start + ' ' + ev.end) + '">' +
+          '<span class="tl-dot" style="background:' + (cat ? cat.color : muted) + '"></span>' +
+          '<div class="tl-info">' +
+            '<div class="tl-name">' + esc(ev.name || '(untitled)') + '</div>' +
+            '<div class="tl-range">' + esc(range) + (cat ? ' <span class="tl-cat">\u00b7 ' + esc(cat.label) + '</span>' : '') + '</div>' +
+            (ev.description ? '<div class="tl-desc">' + esc(ev.description) + '</div>' : '') +
+          '</div>' +
+        '</div>';
+      });
+    }
+
+    // Embed event data as JSON for search
+    var eventData = JSON.stringify(sorted.map(function(ev) {
+      var cat = categoryById(ev.categoryId);
+      return {
+        name: (ev.name || '').toLowerCase(),
+        cat: (cat ? cat.label : '').toLowerCase(),
+        desc: (ev.description || '').toLowerCase(),
+        start: ev.start,
+        end: ev.end
+      };
+    }));
+
     return '<!DOCTYPE html>\n<html lang="' + (state.language || 'en') + '">\n<head>\n' +
       '<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n' +
       '<title>' + esc(state.title || 'Calendar') + '</title>\n' +
       '<style>\n' +
       '*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}\n' +
       'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;' +
-      'background:' + bg + ';color:' + fg + ';display:flex;justify-content:center;padding:20px}\n' +
+      'background:' + bg + ';color:' + fg + ';display:flex;height:100vh;overflow:hidden}\n' +
+      '/* ---- Sidebar ---- */\n' +
+      '.sidebar{width:320px;min-width:280px;border-right:1px solid ' + line + ';display:flex;flex-direction:column;' +
+      'background:' + bg + ';overflow:hidden}\n' +
+      '.sb-head{padding:20px 18px 12px;border-bottom:1px solid ' + line + '}\n' +
+      '.sb-head h2{font-size:1rem;font-weight:700;margin-bottom:10px;color:' + fg + '}\n' +
+      '.sb-search{width:100%;padding:9px 12px 9px 32px;border-radius:6px;border:1px solid ' + line + ';' +
+      'background:' + cardBg + ';color:' + fg + ';font-size:0.82rem;font-family:inherit;outline:none;' +
+      'background-image:url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'14\' height=\'14\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'' + muted.replace('#','%23') + '\' stroke-width=\'2\'%3E%3Ccircle cx=\'11\' cy=\'11\' r=\'8\'/%3E%3Cpath d=\'m21 21-4.35-4.35\'/%3E%3C/svg%3E");' +
+      'background-repeat:no-repeat;background-position:10px center;transition:border-color 0.2s}\n' +
+      '.sb-search:focus{border-color:' + sub + '}\n' +
+      '.sb-search::placeholder{color:' + muted + '}\n' +
+      '.sb-count{font-size:0.7rem;color:' + muted + ';margin-top:6px;text-transform:uppercase;letter-spacing:0.5px}\n' +
+      '.sb-list{flex:1;overflow-y:auto;padding:8px 0}\n' +
+      '/* ---- Timeline cards ---- */\n' +
+      '.tl-card{display:flex;align-items:flex-start;gap:10px;padding:10px 18px;border-bottom:1px solid ' + line + ';' +
+      'transition:background 0.15s;cursor:default}\n' +
+      '.tl-card:hover{background:' + cardBg + '}\n' +
+      '.tl-card.hidden-by-search{display:none}\n' +
+      '.tl-dot{width:10px;height:10px;border-radius:3px;flex-shrink:0;margin-top:4px}\n' +
+      '.tl-info{flex:1;min-width:0}\n' +
+      '.tl-name{font-size:0.84rem;font-weight:600;color:' + fg + ';line-height:1.3}\n' +
+      '.tl-range{font-size:0.72rem;color:' + muted + ';font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin-top:2px}\n' +
+      '.tl-cat{color:' + sub + '}\n' +
+      '.tl-desc{font-size:0.74rem;color:' + sub + ';margin-top:4px;line-height:1.4;font-style:italic}\n' +
+      '.tl-empty{text-align:center;padding:30px;color:' + muted + ';font-size:0.82rem}\n' +
+      '.tl-no-results{text-align:center;padding:20px;color:' + muted + ';font-size:0.78rem;display:none}\n' +
+      '/* ---- Highlight match ---- */\n' +
+      '.tl-card.match-highlight{background:' + (state.theme==='paper'?'rgba(0,0,0,0.06)':'rgba(255,255,255,0.08)') + ';border-left:3px solid ' + sub + '}\n' +
+      '/* ---- Main calendar area ---- */\n' +
+      '.main-area{flex:1;overflow:auto;padding:20px;display:flex;justify-content:center;align-items:flex-start}\n' +
       '.cal-html-grid{display:flex;flex-wrap:wrap;gap:24px;justify-content:center;max-width:1400px}\n' +
       '.cal-month{border-radius:8px;overflow:hidden}\n' +
       '.cal-month-name{font-size:15px;font-weight:600;padding:8px 14px 6px;text-align:center}\n' +
@@ -582,8 +650,65 @@
       '.cal-notes{padding:16px 48px 30px;font-size:11px;line-height:1.7;max-width:700px;margin:0 auto}\n' +
       '.cal-watermark{text-align:right;padding:8px 48px 30px;font-size:9px;opacity:0.45}\n' +
       '.cal-term-divider{width:100%;text-align:center;font-size:13px;font-weight:600;padding:6px 0;border-top:1px dashed;margin:4px 0}\n' +
+      '/* ---- Responsive ---- */\n' +
+      '@media(max-width:800px){body{flex-direction:column}.sidebar{width:100%;min-width:0;max-height:40vh;border-right:none;border-bottom:1px solid ' + line + '}.main-area{padding:12px}}\n' +
+      '@media print{body{display:block;overflow:visible}.sidebar{display:none}.main-area{overflow:visible}}\n' +
       '@media print{@page{margin:0.25in}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}\n' +
-      '</style>\n</head>\n<body>\n' + body + '\n</body>\n</html>';
+      '</style>\n</head>\n<body>\n' +
+      '<aside class="sidebar">\n' +
+        '<div class="sb-head">\n' +
+          '<h2>' + esc(state.title || 'Calendar') + '</h2>\n' +
+          '<input type="text" class="sb-search" id="sb-search" placeholder="Search events\u2026" autocomplete="off">\n' +
+          '<div class="sb-count" id="sb-count">' + sorted.length + ' event' + (sorted.length !== 1 ? 's' : '') + '</div>\n' +
+        '</div>\n' +
+        '<div class="sb-list" id="sb-list">' + timelineRows + '</div>\n' +
+        '<div class="tl-no-results" id="tl-no-results">No events match your search.</div>\n' +
+      '</aside>\n' +
+      '<main class="main-area">\n' + body + '\n</main>\n' +
+      '<script>\n' +
+      '(function(){var events=' + eventData + ';\n' +
+      'var cards=document.querySelectorAll(".tl-card");\n' +
+      'var searchEl=document.getElementById("sb-search");\n' +
+      'var countEl=document.getElementById("sb-count");\n' +
+      'var noResEl=document.getElementById("tl-no-results");\n' +
+      'if(!searchEl)return;\n' +
+      '/* Levenshtein (Wagner-Fischer) */\n' +
+      'function levenshtein(a,b){var m=a.length,n=b.length;if(m===0)return n;if(n===0)return m;' +
+      'var prev=new Array(n+1);var cur=new Array(n+1);' +
+      'for(var j=0;j<=n;j++)prev[j]=j;' +
+      'for(var i=1;i<=m;i++){cur[0]=i;' +
+      'for(var j=1;j<=n;j++){var cost=a[i-1]===b[j-1]?0:1;' +
+      'cur[j]=Math.min(prev[j]+1,cur[j-1]+1,prev[j-1]+cost);}' +
+      'var tmp=prev;prev=cur;cur=tmp;}' +
+      'return prev[n];}\n' +
+      '/* Greedy fuzzy match: returns best distance across name, category, description */\n' +
+      'function fuzzyScore(query,ev){var q=query.toLowerCase();' +
+      'var best=levenshtein(q,ev.name);' +
+      'if(ev.cat){var d=levenshtein(q,ev.cat);if(d<best)best=d;}' +
+      'if(ev.desc){var d2=levenshtein(q,ev.desc);if(d2<best)best=d2;}' +
+      '/* Also check if query is a substring (bonus) */' +
+      'if(ev.name.indexOf(q)!==-1||ev.cat.indexOf(q)!==-1||ev.desc.indexOf(q)!==-1||ev.start.indexOf(q)!==-1)best=Math.min(best,0);' +
+      'return best;}\n' +
+      'searchEl.addEventListener("input",function(){var q=this.value.trim();' +
+      'var visible=0;var threshold=q.length<=2?2:q.length<=5?Math.floor(q.length*1.2):Math.floor(q.length*0.8);' +
+      'if(!q){cards.forEach(function(c){c.classList.remove("hidden-by-search","match-highlight");visible++;});' +
+      'noResEl.style.display="none";countEl.textContent=events.length+" event"+(events.length!==1?"s":"");' +
+      'document.querySelector(".sb-list").style.display="";return;}' +
+      'var scored=[];cards.forEach(function(c,i){' +
+      'var ev=events[i];var score=fuzzyScore(q,ev);' +
+      'scored.push({el:c,score:score,idx:i});});' +
+      'scored.sort(function(a,b){return a.score-b.score;});' +
+      'var cutoff=Math.max(threshold,scored.length>0?scored[0].score+3:3);' +
+      'scored.forEach(function(s){' +
+      'if(s.score<=cutoff){s.el.classList.remove("hidden-by-search");' +
+      'if(s.score<=2)s.el.classList.add("match-highlight");else s.el.classList.remove("match-highlight");' +
+      'visible++;}else{s.el.classList.add("hidden-by-search");s.el.classList.remove("match-highlight");}});' +
+      'countEl.textContent=visible+" of "+events.length+" event"+(events.length!==1?"s":"");' +
+      'noResEl.style.display=visible===0?"block":"none";' +
+      'document.querySelector(".sb-list").style.display=visible===0?"none":"";' +
+      '});})();\n' +
+      '</script>\n' +
+      '</body>\n</html>';
   }
 
   /* Tooltip handler for HTML calendar */
