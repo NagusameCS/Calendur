@@ -725,27 +725,121 @@
       '</body>\n</html>';
   }
 
-  /* Tooltip handler for HTML calendar */
-  function initTooltip() {
-    const tip = $('#cal-tooltip');
+  /* Tooltip / Popup handler — works in both HTML and SVG views */
+  var _popupPinned = false, _popupCell = null;
+
+  function positionTip(mx, my) {
+    var tip = $('#cal-tooltip');
     if (!tip) return;
-    const htmlPane = $('#preview-html');
-    if (!htmlPane) return;
-    htmlPane.addEventListener('mouseover', (e) => {
-      const cell = e.target.closest('[data-tip]');
-      if (!cell) { tip.classList.remove('show'); return; }
-      tip.innerHTML = cell.getAttribute('data-tip');
+    var tw = tip.offsetWidth, th = tip.offsetHeight;
+    var wx = window.innerWidth, wy = window.innerHeight;
+    var x = mx + 14, y = my - th - 10;
+    if (y < 8) y = my + 16;
+    if (x + tw > wx - 12) x = mx - tw - 14;
+    if (x < 8) x = 8;
+    tip.style.left = x + 'px';
+    tip.style.top = y + 'px';
+  }
+
+  function buildPopupHTML(evs) {
+    if (!evs.length) return '';
+    var cats = [];
+    evs.forEach(function(e) {
+      var c = categoryById(e.categoryId);
+      if (c && !cats.find(function(x) { return x.id === c.id; })) cats.push(c);
+    });
+    var accentColor = cats.length ? cats[0].color : '#555';
+    var html = '<div class="tt-arrow"></div><div class="tt-accent" style="background:' + accentColor + '"></div>';
+    if (evs.length === 1) {
+      var e = evs[0];
+      var c = categoryById(e.categoryId);
+      var range = e.start === e.end ? e.start : e.start + ' → ' + e.end;
+      html += '<div class="tt-name">' + esc(e.name || 'Untitled') + '</div>' +
+        '<div class="tt-meta">' + esc(range) + (c ? ' · ' + esc(c.label) : '') + '</div>' +
+        (e.description ? '<div class="tt-desc">' + esc(e.description) + '</div>' : '');
+    } else {
+      html += '<div class="tt-name">' + evs.length + ' events</div>';
+      evs.forEach(function(e) {
+        var c = categoryById(e.categoryId);
+        var range = e.start === e.end ? e.start : e.start + ' → ' + e.end;
+        html += '<div class="tt-row"><span class="tt-event-name">' + esc(e.name || 'Untitled') + '</span> ' +
+          '<span class="tt-event-range">' + esc(range) + (c ? ' · ' + esc(c.label) : '') + '</span></div>';
+      });
+    }
+    html += '<div class="tt-pin-hint">Click to pin · click outside or Esc to dismiss</div>';
+    return html;
+  }
+
+  function initTooltip() {
+    var tip = $('#cal-tooltip');
+    if (!tip) return;
+    var htmlPane = $('#preview-html');
+    var canvasPane = $('#preview-canvas');
+    var stage = $('#preview-stage');
+    if (!stage) return;
+
+    function getDateKey(el) {
+      var d = el.getAttribute('data-date');
+      if (d) return d;
+      var rect = el.closest('[data-date]');
+      return rect ? rect.getAttribute('data-date') : null;
+    }
+
+    function showPopup(evs, x, y) {
+      if (_popupPinned) return;
+      tip.innerHTML = buildPopupHTML(evs);
       tip.classList.add('show');
+      positionTip(x, y);
+    }
+
+    function hidePopup() {
+      if (_popupPinned) return;
+      tip.classList.remove('show');
+    }
+
+    function handleCell(cellEl, e) {
+      if (!cellEl) { hidePopup(); return; }
+      var dateKey = getDateKey(cellEl);
+      if (!dateKey) { hidePopup(); return; }
+      var evs = eventsOn(dateKey);
+      if (!evs.length) { hidePopup(); return; }
+      showPopup(evs, e.clientX, e.clientY);
+    }
+
+    // HTML view: mouseover on td cells
+    if (htmlPane) {
+      htmlPane.addEventListener('mouseover', function(e) {
+        var cell = e.target.closest('[data-date]');
+        handleCell(cell, e);
+      });
+      htmlPane.addEventListener('mousemove', function(e) {
+        if (!tip.classList.contains('show') || _popupPinned) return;
+        positionTip(e.clientX, e.clientY);
+      });
+      htmlPane.addEventListener('mouseleave', function() { hidePopup(); });
+    }
+
+    // SVG view: mouseover on cal-cell rects
+    if (canvasPane) {
+      canvasPane.addEventListener('mouseover', function(e) {
+        var cell = e.target.closest('[data-date]');
+        handleCell(cell, e);
+      });
+      canvasPane.addEventListener('mousemove', function(e) {
+        if (!tip.classList.contains('show') || _popupPinned) return;
+        positionTip(e.clientX, e.clientY);
+      });
+      canvasPane.addEventListener('mouseleave', function() { hidePopup(); });
+    }
+
+    // Escape key dismisses pinned popup
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && _popupPinned) {
+        _popupPinned = false;
+        tip.classList.remove('show', 'pinned');
+        _popupCell = null;
+      }
     });
-    htmlPane.addEventListener('mousemove', (e) => {
-      if (!tip.classList.contains('show')) return;
-      let x = e.clientX + 16, y = e.clientY + 12;
-      if (x + tip.offsetWidth > window.innerWidth - 8) x = e.clientX - tip.offsetWidth - 8;
-      if (y + tip.offsetHeight > window.innerHeight - 8) y = e.clientY - tip.offsetHeight - 8;
-      tip.style.left = x + 'px';
-      tip.style.top = y + 'px';
-    });
-    htmlPane.addEventListener('mouseleave', () => tip.classList.remove('show'));
   }
 
   G.fontStack = () => "-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif";
@@ -2222,6 +2316,8 @@ function downloadQr() {
       if (!cell) {
         // Clicked empty space → clear selection or start panning
         if (!e.shiftKey) { clearPersistHighlight(); _persistRanges = []; updateFormFromRanges(); }
+        // Dismiss pinned popup when clicking away
+        if (_popupPinned) { _popupPinned = false; var t = $('#cal-tooltip'); if (t) t.classList.remove('show', 'pinned'); _popupCell = null; }
         // Start panning
         _panning = true; autoFit = false;
         _panStartX = e.clientX; _panStartY = e.clientY;
@@ -2277,6 +2373,7 @@ function downloadQr() {
       if (!s) return;
       if (ed && ed < s) { var t = s; s = ed; ed = t; }
       var newBlock = { start: s, end: ed || s };
+      var isSingleClick = (s === ed || !ed); // not a drag — just clicked one cell
 
       if (_dragIsShift) {
         _persistRanges.push(newBlock);
@@ -2289,6 +2386,32 @@ function downloadQr() {
       if (!e.shiftKey && $('#e-name')) $('#e-name').focus();
       _dragStart = null; _dragCurrent = null;
       watchFormDates();
+
+      // Popup pinning: on a simple click on a cell with events, toggle pinned popup
+      if (isSingleClick && !e.shiftKey) {
+        var tip = $('#cal-tooltip');
+        if (!tip) return;
+        if (_popupPinned) {
+          // Already pinned — clicking a different cell or same cell toggles off
+          _popupPinned = false;
+          tip.classList.remove('show', 'pinned');
+          _popupCell = null;
+        } else {
+          var evs = eventsOn(s);
+          if (evs.length) {
+            _popupPinned = true;
+            _popupCell = s;
+            tip.innerHTML = buildPopupHTML(evs);
+            tip.classList.add('show', 'pinned');
+            // Position near the cell that was clicked
+            var cellEl = document.querySelector('[data-date="' + s + '"]');
+            if (cellEl) {
+              var rect = cellEl.getBoundingClientRect();
+              positionTip(rect.left + rect.width / 2, rect.top);
+            }
+          }
+        }
+      }
     });
 
     stage.addEventListener('mouseleave', function() {

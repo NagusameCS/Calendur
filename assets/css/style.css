@@ -202,19 +202,50 @@ input[type="date"] { color-scheme: dark; }
 .btn-row { display: flex; gap: 6px; margin-top: 8px; }
 .btn-row .btn { flex: 1; justify-content: center; font-size: 0.78rem; padding: 9px 10px; }
 
-/* Tooltip */
+/* Tooltip / Popup */
 .cal-tooltip {
   position: fixed; z-index: 9999; pointer-events: none;
-  background: rgba(20,20,20,0.96); border: 1px solid #444;
-  border-radius: 8px; padding: 12px 16px; max-width: 300px;
-  font-size: 0.8rem; color: var(--text-primary); line-height: 1.55;
-  box-shadow: 0 8px 28px rgba(0,0,0,0.6); opacity: 0;
-  transform: translateY(6px); transition: opacity 0.18s ease, transform 0.18s ease;
+  background: rgba(20,20,20,0.97); border: 1px solid #555;
+  border-radius: 10px; padding: 14px 18px; max-width: 320px; min-width: 180px;
+  font-size: 0.82rem; color: var(--text-primary); line-height: 1.55;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05);
+  opacity: 0; transform: scale(0.92) translateY(4px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  transform-origin: top left;
 }
-.cal-tooltip.show { opacity: 1; transform: translateY(0); }
-.cal-tooltip .tt-name { font-weight: 700; font-size: 0.88rem; margin-bottom: 4px; }
-.cal-tooltip .tt-meta { color: var(--text-muted); font-size: 0.72rem; font-family: var(--mono); }
-.cal-tooltip .tt-desc { color: var(--text-secondary); margin-top: 6px; font-size: 0.78rem; border-top: 1px solid #333; padding-top: 6px; }
+.cal-tooltip.show { opacity: 1; transform: scale(1) translateY(0); pointer-events: auto; }
+.cal-tooltip .tt-arrow {
+  position: absolute; top: -7px; left: 20px;
+  width: 14px; height: 14px;
+  background: rgba(20,20,20,0.97);
+  border-left: 1px solid #555; border-top: 1px solid #555;
+  transform: rotate(45deg);
+}
+.cal-tooltip .tt-accent {
+  position: absolute; left: 0; top: 10px; bottom: 10px;
+  width: 4px; border-radius: 0 3px 3px 0;
+}
+.cal-tooltip .tt-name {
+  font-weight: 700; font-size: 0.95rem; margin-bottom: 6px;
+  padding-left: 10px; color: #fff;
+}
+.cal-tooltip .tt-meta {
+  color: var(--text-muted); font-size: 0.74rem;
+  font-family: var(--mono); margin-bottom: 2px; padding-left: 10px;
+}
+.cal-tooltip .tt-desc {
+  color: var(--text-secondary); margin-top: 10px; font-size: 0.8rem;
+  border-top: 1px solid #333; padding: 10px 10px 0; line-height: 1.5;
+}
+.cal-tooltip .tt-row { padding-left: 10px; margin-bottom: 3px; }
+.cal-tooltip .tt-row:last-child { margin-bottom: 0; }
+.cal-tooltip .tt-event-name { font-weight: 600; color: #fff; font-size: 0.85rem; }
+.cal-tooltip .tt-event-range { font-size: 0.72rem; color: var(--text-muted); font-family: var(--mono); }
+.cal-tooltip .tt-pin-hint {
+  font-size: 0.65rem; color: #555; text-align: center; margin-top: 8px;
+  border-top: 1px solid #333; padding-top: 7px; display: none;
+}
+.cal-tooltip.pinned .tt-pin-hint { display: block; }
 
 /* HTML calendar preview */
 .preview-html { width: fit-content; margin: 0 auto; contain: content; }
