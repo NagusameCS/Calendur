@@ -927,7 +927,7 @@
   /* ============================================================================
    * EXPORT
    * ========================================================================== */
-  function svgString() { return currentBuild.svg; }
+  function svgString() { if (!currentBuild) currentBuild = buildCalendar(); return currentBuild.svg; }
 
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
@@ -968,6 +968,8 @@
 
   async function doExport() {
     flush();
+    // Ensure currentBuild exists (may be null if in HTML view mode)
+    if (!currentBuild) currentBuild = buildCalendar();
     const fmt = $('#x-format').value;
     if (fmt === 'ics') {
       var ics = generateIcs();
