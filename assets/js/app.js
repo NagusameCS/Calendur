@@ -316,6 +316,26 @@
     // Watermark
     const watermarkH = state.showWatermark ? 22 : 0;
 
+
+  function downloadQr() {
+    var qrUrl = 'https://nagusamecs.github.io/Calendur/';
+    try {
+      var json = JSON.stringify({ categories: state.categories, events: state.events, notes: state.notes });
+      try { qrUrl += '#cfg=' + btoa(unescape(encodeURIComponent(json))); } catch (e) {}
+    } catch (e) {}
+    var apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrUrl);
+    // Open in new tab for download
+    var a = document.createElement('a');
+    a.href = apiUrl;
+    a.download = 'calendur-qr.png';
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    toast('QR opened for download');
+  }
+
+
     // QR code (if enabled) — reserve space at bottom
     var qrH = state.showQr ? 80 + g.margin : 0;
     var totalH = notesBlock.y + notesBlock.h + watermarkH + qrH + g.margin;
@@ -1463,6 +1483,7 @@
     onCheck('#c-watermark', (v) => state.showWatermark = v);
     onCheck('#c-interactive', (v) => state.interactiveSvg = v);
     onCheck('#c-qr', (v) => state.showQr = v);
+    $('#btn-download-qr').addEventListener('click', downloadQr);
 
     // Palette apply
     $('#c-palette').addEventListener('change', (e) => {
