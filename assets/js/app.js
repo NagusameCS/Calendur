@@ -883,6 +883,7 @@
       $('#preview-canvas').classList.add('hidden');
       $('#preview-html').classList.remove('hidden');
       $('#preview-html').innerHTML = buildHtmlCalendar();
+      persistHighlight();
       updateDims();
       save();
       initTooltip();
@@ -892,6 +893,7 @@
       $('#preview-canvas').classList.remove('hidden');
       $('#preview-canvas').innerHTML = currentBuild.svg;
       applyZoom();
+      persistHighlight();
       updateDims();
       save();
     }
@@ -1689,19 +1691,37 @@
 
   /* ---------- Preview click-to-add / drag-to-range ---------- */
   var _dragStart = null, _dragCurrent = null, _dragging = false;
+  var _persistStart = null, _persistEnd = null;
 
   function initPreviewClick() {
     var stage = $('#preview-stage');
     if (!stage) return;
+
     stage.addEventListener('mousedown', function(e) {
       var cell = e.target.closest('[data-date]');
       if (!cell) return;
       var date = cell.getAttribute('data-date');
       if (!date) return;
-      _dragStart = date; _dragCurrent = date; _dragging = true;
-      highlightDragRange(date, date);
+
+      if (e.shiftKey && _persistStart) {
+        // Shift+click: extend existing persistent selection
+        var a = _persistStart, b = date;
+        if (b < a) { var t = a; a = b; b = t; }
+        _persistEnd = b;
+        _dragStart = a; _dragCurrent = b;
+        fillFormDates(a, b);
+        persistHighlight();
+        _dragging = true;
+      } else {
+        // Normal click/drag: clear previous and start fresh
+        clearPersistHighlight();
+        _persistStart = null; _persistEnd = null;
+        _dragStart = date; _dragCurrent = date; _dragging = true;
+        highlightDragRange(date, date);
+      }
       e.preventDefault();
     });
+
     stage.addEventListener('mousemove', function(e) {
       if (!_dragging) return;
       var cell = e.target.closest('[data-date]');
@@ -1711,20 +1731,72 @@
       _dragCurrent = date;
       highlightDragRange(_dragStart, _dragCurrent);
     });
-    stage.addEventListener('mouseup', function() {
+
+    stage.addEventListener('mouseup', function(e) {
       if (!_dragging) return;
-      _dragging = false; clearDragHighlight();
+      _dragging = false;
+      clearDragHighlight();
       var s = _dragStart, e = _dragCurrent;
       if (!s) return;
       if (e && e < s) { var t = s; s = e; e = t; }
-      if ($('#e-start')) $('#e-start').value = s;
-      if ($('#e-end')) $('#e-end').value = e || s;
-      if ($('#e-name')) $('#e-name').focus();
+      _persistStart = s; _persistEnd = e || s;
+      fillFormDates(s, e || s);
+      persistHighlight();
+      if (!e.shiftKey && $('#e-name')) $('#e-name').focus();
       _dragStart = null; _dragCurrent = null;
+      // Watch form fields for manual date changes
+      watchFormDates();
     });
+
     stage.addEventListener('mouseleave', function() {
       if (_dragging) { _dragging = false; clearDragHighlight(); _dragStart = null; }
     });
+
+    // Initial persistent highlight if form has dates
+    updatePersistFromForm();
+  }
+
+  function fillFormDates(s, e) {
+    if ($('#e-start')) $('#e-start').value = s;
+    if ($('#e-end')) $('#e-end').value = e || s;
+  }
+
+  function persistHighlight() {
+    clearPersistHighlight();
+    if (!_persistStart) return;
+    var a = _persistStart, b = _persistEnd || _persistStart;
+    if (b < a) { var t = a; a = b; b = t; }
+    var cells = document.querySelectorAll('[data-date]');
+    for (var i = 0; i < cells.length; i++) {
+      var d = cells[i].getAttribute('data-date');
+      if (d >= a && d <= b) cells[i].classList.add('selection-persist');
+    }
+  }
+
+  function clearPersistHighlight() {
+    var cells = document.querySelectorAll('.selection-persist');
+    for (var i = 0; i < cells.length; i++) cells[i].classList.remove('selection-persist');
+  }
+
+  function updatePersistFromForm() {
+    var s = $('#e-start') ? $('#e-start').value : '';
+    var e = $('#e-end') ? $('#e-end').value : '';
+    if (s) { _persistStart = s; _persistEnd = e || s; persistHighlight(); }
+  }
+
+  var _formWatcher = null;
+  function watchFormDates() {
+    if (_formWatcher) return;
+    _formWatcher = function() {
+      var s = $('#e-start') ? $('#e-start').value : '';
+      var e = $('#e-end') ? $('#e-end').value : '';
+      if (s && s !== _persistStart) {
+        _persistStart = s; _persistEnd = e || s;
+        persistHighlight();
+      }
+    };
+    if ($('#e-start')) $('#e-start').addEventListener('change', _formWatcher);
+    if ($('#e-end')) $('#e-end').addEventListener('change', _formWatcher);
   }
 
   function highlightDragRange(from, to) {
