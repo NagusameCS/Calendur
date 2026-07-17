@@ -189,13 +189,37 @@
   function buildEventIndex() {
     _eventIndex = new Map();
     state.events.forEach((ev) => {
-      // Expand the range into individual day keys
-      // WARNING: for multi-year ranges this could be expensive — cap at 1000 days
       let s = ev.start, e = ev.end;
       if (e < s) { const t = s; s = e; e = t; }
       const startDate = new Date(s + 'T00:00:00Z');
       const endDate = new Date(e + 'T00:00:00Z');
       let count = 0;
+
+      // Handle recurring events
+      var repeat = ev.repeat;
+      if (repeat && repeat !== 'none') {
+        var interval = repeat === 'biweekly' ? 14 : repeat === 'weekly' ? 7 : repeat === 'monthly' ? 30 : 0;
+        if (interval > 0) {
+          // Expand from start date through end of calendar view
+          var calendarEnd = new Date(Date.UTC(state.year, state.startMonth + state.months, 0));
+          for (var rd = new Date(startDate); rd <= calendarEnd && count < 1000; rd.setUTCDate(rd.getUTCDate() + interval)) {
+            // For monthly, snap to same day of month
+            if (repeat === 'monthly') {
+              rd.setUTCDate(startDate.getUTCDate());
+              if (rd.getUTCDate() < startDate.getUTCDate()) rd.setUTCDate(1); // handle month-end overflow
+            }
+            var key = ymd(rd.getUTCFullYear(), rd.getUTCMonth(), rd.getUTCDate());
+            if (rd >= startDate) {
+              if (!_eventIndex.has(key)) _eventIndex.set(key, []);
+              _eventIndex.get(key).push(ev);
+            }
+            count++;
+          }
+          return; // skip the standard range expansion
+        }
+      }
+
+      // Standard range expansion
       for (let d = new Date(startDate); d <= endDate && count < 1000; d.setUTCDate(d.getUTCDate() + 1)) {
         const key = ymd(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
         if (!_eventIndex.has(key)) _eventIndex.set(key, []);
@@ -1532,7 +1556,7 @@
       const t = start; start = end; end = t;
       toast('Dates swapped — start must be before end');
     }
-    state.events.push({ id: nextId(), name: name, description: desc, categoryId: catId, start: start, end: end });
+    state.events.push({ id: nextId(), name: name, description: desc, repeat: repeat, categoryId: catId, start: start, end: end });
     $('#e-name').value = '';
     if ($('#e-desc')) $('#e-desc').value = '';
     renderEvents();
