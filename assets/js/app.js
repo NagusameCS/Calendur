@@ -316,7 +316,7 @@
     // Watermark
     const watermarkH = state.showWatermark ? 22 : 0;
     // QR code (if enabled) — reserve space at bottom
-    var qrH = state.showQr ? 80 + g.margin : 0;
+    var qrH = state.showQr ? 212 : 0; // 200px QR + margin
     var totalH = notesBlock.y + notesBlock.h + watermarkH + qrH + g.margin;
 
     const wk = weekdayOrder();
@@ -388,18 +388,23 @@
     }
 
     // QR code in bottom-left corner
-    // QR code
     if (state.showQr) {
       try {
         var qrUrl = 'https://nagusamecs.github.io/Calendur/';
         var qrJson = JSON.stringify({ categories: state.categories, events: state.events, notes: state.notes });
-        try { qrUrl += '#cfg=' + btoa(unescape(encodeURIComponent(qrJson))); } catch (e) {}
-        var qs = 80;
+        var qrEncoded = '';
+        try { qrEncoded = '#cfg=' + btoa(unescape(encodeURIComponent(qrJson))); } catch (e) {}
+        // QR codes max out at ~1,200 chars for readable density (v40, medium EC).
+        // If the encoded config would overflow, just link to the site.
+        if (qrUrl.length + qrEncoded.length > 1200) qrEncoded = '';
+        qrUrl += qrEncoded;
+        var qs = 200; // 200×200 is scannable at print resolution
+        var qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=' + qs + 'x' + qs + '&margin=8&data=' + encodeURIComponent(qrUrl);
         p('<g transform="translate(' + r2(g.margin) + ',' + r2(totalH - g.margin - qs) + ')">' +
-          '<rect x="-4" y="-4" width="' + (qs + 8) + '" height="' + (qs + 8) + '" fill="' + th.page + '" rx="4"/>' +
+          '<rect x="-6" y="-6" width="' + (qs + 12) + '" height="' + (qs + 12) + '" fill="' + th.page + '" rx="4"/>' +
           '<image x="0" y="0" width="' + qs + '" height="' + qs + '" ' +
-          'href="https://api.qrserver.com/v1/create-qr-code/?size=' + qs + 'x' + qs + '&amp;data=' + encodeURIComponent(qrUrl) + '" ' +
-          'preserveAspectRatio="none"/>' +
+          'href="' + qrApiUrl + '" ' +
+          'preserveAspectRatio="xMidYMid meet"/>' +
           '</g>');
       } catch (e) {}
     }
@@ -1205,11 +1210,16 @@
 
 function downloadQr() {
     var qrUrl = 'https://nagusamecs.github.io/Calendur/';
+    var qrEncoded = '';
     try {
       var json = JSON.stringify({ categories: state.categories, events: state.events, notes: state.notes });
-      try { qrUrl += '#cfg=' + btoa(unescape(encodeURIComponent(json))); } catch (e) {}
+      try { qrEncoded = '#cfg=' + btoa(unescape(encodeURIComponent(json))); } catch (e) {}
     } catch (e) {}
-    var apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' + encodeURIComponent(qrUrl);
+    // Don't overflow QR code capacity (~1,200 chars safe limit)
+    if (qrUrl.length + qrEncoded.length > 1200) qrEncoded = '';
+    qrUrl += qrEncoded;
+    // 600×600 with margin gives a clean, scannable QR
+    var apiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=600x600&margin=12&data=' + encodeURIComponent(qrUrl);
     // Open in new tab for download
     var a = document.createElement('a');
     a.href = apiUrl;
@@ -1218,7 +1228,7 @@ function downloadQr() {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    toast('QR opened for download');
+    toast('QR opened for download' + (qrEncoded ? '' : ' (config too large — site link only)'));
   }
 
   /* ---------- Print PDF ---------- */
