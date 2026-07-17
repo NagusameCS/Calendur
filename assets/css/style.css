@@ -223,7 +223,11 @@ input[type="date"] { color-scheme: dark; }
 .preview-html .cal-month-name { font-size: 15px; font-weight: 600; padding: 8px 14px 6px; text-align: center; }
 .preview-html .cal-month table { border-collapse: collapse; width: 100%; }
 .preview-html .cal-month th { font-size: 9.5px; font-weight: 600; padding: 4px 0; text-align: center; width: 46px; }
+.preview-html .cal-month th.wk-col-hdr { width: 20px; font-size: 8px; }
 .preview-html .cal-month td { width: 46px; height: 42px; text-align: center; vertical-align: top; font-size: 12px; font-weight: 500; padding: 4px 2px; position: relative; cursor: default; }
+.preview-html .cal-month td.wk-num { width: 20px; font-size: 8px; color: var(--text-muted); opacity: 0.55; text-align: right; padding-right: 4px; }
+.preview-html .cal-month td.has-event { cursor: pointer; }
+.preview-html .cal-term-divider { width: 100%; text-align: center; font-size: 13px; font-weight: 600; padding: 6px 0; border-top: 1px dashed; margin: 4px 0; }
 .preview-html .cal-month td.has-event { cursor: pointer; }
 .preview-html .cal-month td .day-num { display: block; line-height: 1; }
 .preview-html .cal-month td .event-band { position: absolute; bottom: 3px; left: 3px; right: 3px; height: 7px; border-radius: 1.5px; display: flex; overflow: hidden; }

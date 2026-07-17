@@ -459,8 +459,20 @@
       html += '</tr></thead><tbody>';
 
       let dayIdx = 0;
+      var prevWkRow = 0;
       for (let rowN = 0; rowN < 6; rowN++) {
         html += '<tr>';
+        // Week number cell (before day cells)
+        if (state.showWeekNumbers) {
+          var wkDay = dayIdx - offset + 1;
+          var wkNum = '';
+          if (wkDay >= 1 && wkDay <= dim) {
+            wkNum = isoWeekNum(yr, m, wkDay);
+            if (wkNum === prevWkRow) wkNum = '';
+            else prevWkRow = wkNum;
+          }
+          html += '<td class="wk-num" style="border:' + borderStyle + '">' + wkNum + '</td>';
+        }
         for (let col = 0; col < 7; col++) {
           const dayNum = dayIdx - offset + 1;
           const inMonth = dayNum >= 1 && dayNum <= dim;
@@ -502,9 +514,10 @@
 
           const num = inMonth ? dayNum : (dayNum < 1 ? prevDim + dayNum : dayNum - dim);
           const align = state.dayAlign || 'start';
+          var dateAttr2 = inMonth ? ' data-date="' + ymd(yr, m, dayNum) + '"' : '';
           html += '<td class="' + cls + '" style="background:' + cellBg + ';border:' + borderStyle + ';text-align:' + align +
             (cls.includes('today-ring') ? ';box-shadow:inset 0 0 0 1.6px ' + todayCol : '') +
-            '"' + dataAttrs + '>' +
+            '"' + dateAttr2 + dataAttrs + '>' +
             '<span class="day-num" style="color:' + th.text + '">' + num + '</span>' + bands + '</td>';
           dayIdx++;
         }
@@ -611,6 +624,8 @@
     // Week number column (rendered before cells so they appear on the left)
     if (state.showWeekNumbers) {
       var prevWeek = 0;
+      // "W" header above the week number column
+      push(text(innerX - 16, gridY - 14, 'W', th.muted, 8, 600, 'end'));
       for (var wi = 0; wi < 42; wi++) {
         var wday = wi - offset + 1;
         if (wday >= 1 && wday <= dim) {
@@ -1118,15 +1133,18 @@ function downloadQr() {
     // Detect delimiter: tab or comma
     const sep = lines[0].includes('\t') ? '\t' : ',';
     const headers = lines[0].split(sep).map((h) => h.trim().toLowerCase());
+    // Name, Category, Start, (End), (Description)
     const nameCol = headers.findIndex((h) => h === 'name' || h === 'event' || h === 'title');
     const catCol  = headers.findIndex((h) => h === 'category' || h === 'cat' || h === 'type' || h === 'color');
     const startCol = headers.findIndex((h) => h === 'start' || h === 'from' || h === 'begin');
     const endCol   = headers.findIndex((h) => h === 'end' || h === 'to' || h === 'finish');
+    const descCol  = headers.findIndex((h) => h === 'description' || h === 'desc' || h === 'detail' || h === 'notes');
     if (nameCol === -1 || startCol === -1) { toast('Columns needed: Name, Start (and optionally Category, End)'); return; }
     let added = 0;
     for (let i = 1; i < lines.length; i++) {
       const cols = lines[i].split(sep).map((c) => c.trim());
       const name = cols[nameCol] || '';
+      const desc = descCol !== -1 && cols[descCol] ? cols[descCol].trim() : '';
       let catId = state.categories[0] ? state.categories[0].id : null;
       if (catCol !== -1 && cols[catCol]) {
         const found = state.categories.find((c) => c.label.toLowerCase() === cols[catCol].toLowerCase());
@@ -1136,7 +1154,7 @@ function downloadQr() {
       const start = cols[startCol] || '';
       const end = (endCol !== -1 && cols[endCol]) ? cols[endCol] : start;
       if (!start) continue;
-      state.events.push({ id: nextId(), name: name, categoryId: catId, start: start, end: end < start ? start : end });
+      state.events.push({ id: nextId(), name: name, description: desc, repeat: 'none', categoryId: catId, start: start, end: end < start ? start : end });
       added++;
     }
     $('#csv-text').value = '';
@@ -1230,8 +1248,9 @@ function downloadQr() {
       if (!catId) return;
       const start = item.start || item.from || item.begin || '';
       const end = item.end || item.to || item.finish || start;
+      const repeatVal = item.repeat || 'none';
       if (!start) return;
-      state.events.push({ id: nextId(), name: name, description: item.description || item.desc || '', categoryId: catId, start: start, end: end < start ? start : end });
+      state.events.push({ id: nextId(), name: name, description: item.description || item.desc || '', repeat: repeatVal, categoryId: catId, start: start, end: end < start ? start : end });
       added++;
     });
     renderEvents(); render();
@@ -1469,7 +1488,6 @@ function downloadQr() {
     on('#c-weekstart', 'change', (v) => state.weekStart = parseInt(v, 10));
     on('#c-theme', 'change', (v) => state.theme = v);
     on('#c-language', 'change', (v) => state.language = v);
-    on('#c-language', 'change', (v) => state.language = v);
     on('#c-fontscale', 'change', (v) => { state.fontScale = parseFloat(v) || 1; });
     on('#c-todaycolor', 'input', (v) => { state.todayColor = v; });
     onCheck('#c-weekend', (v) => state.shadeWeekend = v);
@@ -1687,8 +1705,8 @@ function downloadQr() {
   }
 
   /* ---------- Preview click-to-add / drag-to-range ---------- */
-  var _dragStart = null, _dragCurrent = null, _dragging = false;
-  var _persistStart = null, _persistEnd = null;
+  var _dragStart = null, _dragCurrent = null, _dragging = false, _dragIsShift = false;
+  var _persistRanges = [];  // [{start, end}, ...] — disjoint selection blocks
 
   function initPreviewClick() {
     var stage = $('#preview-stage');
@@ -1696,26 +1714,25 @@ function downloadQr() {
 
     stage.addEventListener('mousedown', function(e) {
       var cell = e.target.closest('[data-date]');
-      if (!cell) return;
+      if (!cell) {
+        // Clicked empty space → clear all
+        if (!e.shiftKey) { clearPersistHighlight(); _persistRanges = []; updateFormFromRanges(); }
+        return;
+      }
       var date = cell.getAttribute('data-date');
       if (!date) return;
 
-      if (e.shiftKey && _persistStart) {
-        // Shift+click: extend existing persistent selection
-        var a = _persistStart, b = date;
-        if (b < a) { var t = a; a = b; b = t; }
-        _persistEnd = b;
-        _dragStart = a; _dragCurrent = b;
-        fillFormDates(a, b);
-        persistHighlight();
-        _dragging = true;
-      } else {
-        // Normal click/drag: clear previous and start fresh
+      _dragIsShift = e.shiftKey;
+
+      if (!e.shiftKey) {
+        // Normal click/drag: clear all previous and start fresh
         clearPersistHighlight();
-        _persistStart = null; _persistEnd = null;
-        _dragStart = date; _dragCurrent = date; _dragging = true;
-        highlightDragRange(date, date);
+        _persistRanges = [];
       }
+      // Shift: keep existing ranges, will append the new block on mouseup
+
+      _dragStart = date; _dragCurrent = date; _dragging = true;
+      highlightDragRange(date, date);
       e.preventDefault();
     });
 
@@ -1733,15 +1750,23 @@ function downloadQr() {
       if (!_dragging) return;
       _dragging = false;
       clearDragHighlight();
-      var s = _dragStart, e = _dragCurrent;
+      var s = _dragStart, ed = _dragCurrent;
       if (!s) return;
-      if (e && e < s) { var t = s; s = e; e = t; }
-      _persistStart = s; _persistEnd = e || s;
-      fillFormDates(s, e || s);
+      if (ed && ed < s) { var t = s; s = ed; ed = t; }
+      var newBlock = { start: s, end: ed || s };
+
+      if (_dragIsShift) {
+        // Append a disjoint block to existing selection
+        _persistRanges.push(newBlock);
+      } else {
+        // Replace — start a fresh isolated selection
+        _persistRanges = [newBlock];
+      }
+
+      updateFormFromRanges();
       persistHighlight();
       if (!e.shiftKey && $('#e-name')) $('#e-name').focus();
       _dragStart = null; _dragCurrent = null;
-      // Watch form fields for manual date changes
       watchFormDates();
     });
 
@@ -1753,6 +1778,15 @@ function downloadQr() {
     updatePersistFromForm();
   }
 
+  /** Compute overall form start/end from all disjoint blocks. */
+  function updateFormFromRanges() {
+    if (!_persistRanges.length) return;
+    var allStarts = _persistRanges.map(function(r) { return r.start; });
+    var allEnds   = _persistRanges.map(function(r) { return r.end; });
+    allStarts.sort(); allEnds.sort();
+    fillFormDates(allStarts[0], allEnds[allEnds.length - 1]);
+  }
+
   function fillFormDates(s, e) {
     if ($('#e-start')) $('#e-start').value = s;
     if ($('#e-end')) $('#e-end').value = e || s;
@@ -1760,13 +1794,16 @@ function downloadQr() {
 
   function persistHighlight() {
     clearPersistHighlight();
-    if (!_persistStart) return;
-    var a = _persistStart, b = _persistEnd || _persistStart;
-    if (b < a) { var t = a; a = b; b = t; }
-    var cells = document.querySelectorAll('[data-date]');
-    for (var i = 0; i < cells.length; i++) {
-      var d = cells[i].getAttribute('data-date');
-      if (d >= a && d <= b) cells[i].classList.add('selection-persist');
+    var scope = state.interactiveView ? '#preview-html' : '#preview-canvas';
+    for (var ri = 0; ri < _persistRanges.length; ri++) {
+      var r = _persistRanges[ri];
+      var a = r.start, b = r.end;
+      if (b < a) { var t = a; a = b; b = t; }
+      var cells = document.querySelectorAll(scope + ' [data-date]');
+      for (var i = 0; i < cells.length; i++) {
+        var d = cells[i].getAttribute('data-date');
+        if (d >= a && d <= b) cells[i].classList.add('selection-persist');
+      }
     }
   }
 
@@ -1778,7 +1815,7 @@ function downloadQr() {
   function updatePersistFromForm() {
     var s = $('#e-start') ? $('#e-start').value : '';
     var e = $('#e-end') ? $('#e-end').value : '';
-    if (s) { _persistStart = s; _persistEnd = e || s; persistHighlight(); }
+    if (s) { _persistRanges = [{ start: s, end: e || s }]; persistHighlight(); }
   }
 
   var _formWatcher = null;
@@ -1787,8 +1824,8 @@ function downloadQr() {
     _formWatcher = function() {
       var s = $('#e-start') ? $('#e-start').value : '';
       var e = $('#e-end') ? $('#e-end').value : '';
-      if (s && s !== _persistStart) {
-        _persistStart = s; _persistEnd = e || s;
+      if (s && (_persistRanges.length !== 1 || _persistRanges[0].start !== s || _persistRanges[0].end !== (e || s))) {
+        _persistRanges = [{ start: s, end: e || s }];
         persistHighlight();
       }
     };
@@ -1801,7 +1838,8 @@ function downloadQr() {
     var a = from, b = to;
     if (b < a) { var t = a; a = b; b = t; }
     clearDragHighlight();
-    var cells = document.querySelectorAll('[data-date]');
+    var scope = state.interactiveView ? '#preview-html' : '#preview-canvas';
+    var cells = document.querySelectorAll(scope + ' [data-date]');
     for (var i = 0; i < cells.length; i++) {
       var d = cells[i].getAttribute('data-date');
       if (d >= a && d <= b) cells[i].classList.add('drag-highlight');
