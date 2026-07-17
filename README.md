@@ -3,8 +3,6 @@
 Client-side calendar generator. Design colour-coded school and event calendars,
 export as SVG/PNG/JPG at any resolution.
 
-Static site — no backend, no build step, no dependencies. Runs on GitHub Pages.
-
 ## Quick start
 
 Open `index.html` in a browser, or visit the deployed site. Configure in the
