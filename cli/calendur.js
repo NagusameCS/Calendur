@@ -383,9 +383,11 @@ Options:
   --watermark        Add "Made with Calendur" credit line
   --config    <f>   Load full config from JSON file
   --stdin            Read config JSON from stdin
-  --format    <s>   Output format: svg|png|jpg (default: svg)
-  --scale     <n>   Scale factor for raster output (default: 2)
-  -o          <f>   Output file path (default: stdout)
+  --format    <s>   Output: svg|png|jpg|json (default: svg)
+  --scale     <n>   Scale for raster output (default: 2)
+  --dry-run          Print merged config as JSON and exit
+  --validate         Validate config and print as JSON
+  -o          <f>   Output file (default: stdout)
   --help, -h        Show this help
 
 JSON config format (--config or --stdin):
@@ -409,25 +411,40 @@ Examples:
     let raw = '';
     process.stdin.setEncoding('utf8');
     for await (const chunk of process.stdin) raw += chunk;
-    try { state = Object.assign(state, JSON.parse(raw)); } catch (e) { console.error('Invalid JSON from stdin'); process.exit(1); }
+    try { state = Object.assign(state, JSON.parse(raw)); } catch (e) { console.error('Invalid JSON from stdin:', e.message); process.exit(1); }
   }
   if (opts.config) {
-    try { state = Object.assign(state, JSON.parse(fs.readFileSync(opts.config, 'utf8'))); } catch (e) { console.error('Cannot read config file:', opts.config); process.exit(1); }
+    try { state = Object.assign(state, JSON.parse(fs.readFileSync(opts.config, 'utf8'))); } catch (e) { console.error('Cannot read config file:', opts.config, '\n' + e.message); process.exit(1); }
   }
 
-  // Override with CLI args (CLI args take priority)
+  // Override with CLI args
   if (opts.year)      state.year = Math.max(1, Math.min(9999, +opts.year));
   if (opts.months)    state.months = Math.max(1, Math.min(36, +opts.months));
   if (opts.start)     state.startMonth = Math.max(0, Math.min(11, +opts.start));
   if (opts.theme && THEMES[opts.theme]) state.theme = opts.theme;
+  else if (opts.theme) { console.error('Unknown theme:', opts.theme, '(use: noir|paper|mono|slate|blueprint|cream)'); process.exit(1); }
   if (opts.title)     state.title = opts.title;
   if (opts.subtitle)  state.subtitle = opts.subtitle;
   if (opts.notes)     state.notes = opts.notes;
   if (opts.weekstart !== undefined) state.weekStart = +opts.weekstart ? 1 : 0;
-  if (opts.fontscale) state.fontScale = parseFloat(opts.fontscale) || 1;
+  if (opts.fontscale) { const fs = parseFloat(opts.fontscale); if (fs > 0 && fs <= 2) state.fontScale = fs; }
   if (opts.watermark === 'true' || opts.watermark === '1') state.showWatermark = true;
   if (opts.columns)   state.columns = opts.columns;
   if (opts.borders === '0' || opts.borders === 'false') state.showBorders = false;
+
+  // --dry-run: validate and print config, then exit
+  if (opts['dry-run'] || opts['validate']) {
+    const errors = [];
+    if (isNaN(state.year) || state.year < 1 || state.year > 9999) errors.push('year must be 1-9999');
+    if (isNaN(state.months) || state.months < 1 || state.months > 36) errors.push('months must be 1-36');
+    if (errors.length) {
+      console.error('Validation errors:');
+      errors.forEach((e) => console.error('  - ' + e));
+      process.exit(1);
+    }
+    console.log(JSON.stringify(state, null, 2));
+    if (opts['dry-run']) process.exit(0);
+  }
 
   // Build SVG
   const svg = buildCalendar(state);
@@ -442,6 +459,10 @@ Examples:
     } else {
       process.stdout.write(svg);
     }
+  } else if (format === 'json') {
+    const json = JSON.stringify(state, null, 2);
+    if (outFile) { fs.writeFileSync(outFile, json, 'utf8'); console.error('Wrote', outFile); }
+    else process.stdout.write(json);
   } else if (format === 'png' || format === 'jpg' || format === 'jpeg') {
     // Try to use sharp for rasterization
     let sharp;

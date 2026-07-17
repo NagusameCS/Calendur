@@ -1523,23 +1523,44 @@
     renderNow();
     // Auto-download if ?auto=1 is set
     if (getParam('auto') === '1') {
-      // Use a short delay to let the SVG build, then download
       setTimeout(() => {
-        if (getParam('format')) {
-          $('#x-format').value = getParam('format');
+        try {
+          // Validate critical params before proceeding
+          state.year = clampInt(state.year, 1, 9999, new Date().getUTCFullYear());
+          state.months = clampInt(state.months, 1, 36, 10);
+          state.startMonth = clampInt(state.startMonth, 0, 11, 8);
+          
+          const fmt = getParam('format') || 'svg';
+          if (fmt === 'json') {
+            // Output raw config as JSON
+            downloadBlob(
+              new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }),
+              safeName() + '.json'
+            );
+            return;
+          }
+          if (['svg','png','jpg','jpeg'].indexOf(fmt) === -1) {
+            document.body.innerHTML = '<pre>Error: invalid format "' + esc(fmt) + '". Use svg, png, jpg, or json.</pre>';
+            return;
+          }
+          $('#x-format').value = fmt;
           $('#x-format').dispatchEvent(new Event('change', { bubbles: true }));
+          
+          if (getParam('scale')) {
+            const sv = getParam('scale');
+            // Accept page presets or numeric values
+            const validScales = ['1','2','3','4','a4','letter','tabloid','custom'];
+            if (validScales.indexOf(sv) !== -1 || !isNaN(parseFloat(sv))) {
+              $('#x-scale').value = sv;
+              $('#x-scale').dispatchEvent(new Event('change', { bubbles: true }));
+            }
+          }
+          flush();
+          doExport();
+        } catch (e) {
+          document.body.innerHTML = '<pre>Error generating calendar: ' + esc(e.message) + '</pre>';
         }
-        if (getParam('scale')) {
-          $('#x-scale').value = getParam('scale');
-          $('#x-scale').dispatchEvent(new Event('change', { bubbles: true }));
-        }
-        flush();
-        doExport();
-        // Optional: redirect to remove params
-        if (getParam('redirect') === '1' || getParam('auto') === '1') {
-          setTimeout(() => { window.close ? window.close() : null; }, 1000);
-        }
-      }, 600);
+      }, 500);
     }
   }
 
@@ -1551,26 +1572,41 @@
     if (p('start'))      state.startMonth = clampInt(p('start'), 0, 11, 0);
     if (p('title'))      state.title = decodeURIComponent(p('title'));
     if (p('subtitle'))   state.subtitle = decodeURIComponent(p('subtitle'));
+    if (p('notes'))      state.notes = decodeURIComponent(p('notes'));
     if (p('theme'))      { const t = p('theme'); if (THEMES[t]) state.theme = t; }
     if (p('weekstart'))  state.weekStart = p('weekstart') === '1' ? 1 : 0;
     if (p('weekend'))    state.shadeWeekend = p('weekend') !== '0';
     if (p('columns'))    state.columns = p('columns');
-    if (p('fontscale'))  state.fontScale = parseFloat(p('fontscale')) || 1;
+    if (p('fontscale'))  { const fs = parseFloat(p('fontscale')); if (fs > 0 && fs <= 2) state.fontScale = fs; }
     if (p('borders'))    state.showBorders = p('borders') !== '0';
     if (p('watermark'))  state.showWatermark = p('watermark') === '1';
     if (p('today'))      state.highlightToday = p('today') === '1';
-    if (p('dayalign'))   state.dayAlign = p('dayalign');
-    if (p('view'))       {} // handled separately
-    // Load full config from ?cfg=base64json (used by embed URLs)
+    if (p('labels'))     state.showLabels = p('labels') === '1';
+    if (p('trailing'))   state.trailingDays = p('trailing') === '1';
+    if (p('dayalign'))   { const a = p('dayalign'); if (['start','middle','end'].indexOf(a) !== -1) state.dayAlign = a; }
+    if (p('view'))       {}
     if (p('cfg')) {
       try {
         const json = decodeURIComponent(escape(atob(p('cfg'))));
         const s = JSON.parse(json);
-        if (s && s.categories) state.categories = s.categories;
-        if (s && s.events) state.events = s.events;
-        if (s && s.notes != null) state.notes = s.notes;
-      } catch (e) { /* silently ignore bad cfg */ }
+        if (s.categories && Array.isArray(s.categories)) state.categories = s.categories;
+        if (s.events && Array.isArray(s.events)) state.events = s.events;
+        if (s.notes != null) state.notes = s.notes;
+      } catch (e) {}
     }
+  }
+
+  function validateConfig(s) {
+    const errors = [];
+    if (!s || typeof s !== 'object') { errors.push('config must be an object'); return errors; }
+    if (s.year != null && (isNaN(s.year) || s.year < 1 || s.year > 9999)) errors.push('year must be 1-9999');
+    if (s.months != null && (isNaN(s.months) || s.months < 1 || s.months > 36)) errors.push('months must be 1-36');
+    if (s.startMonth != null && (isNaN(s.startMonth) || s.startMonth < 0 || s.startMonth > 11)) errors.push('start must be 0-11');
+    if (s.theme && !THEMES[s.theme]) errors.push('unknown theme: ' + s.theme);
+    if (s.fontScale != null && (isNaN(s.fontScale) || s.fontScale <= 0 || s.fontScale > 2)) errors.push('fontScale must be >0 and <=2');
+    if (s.events && !Array.isArray(s.events)) errors.push('events must be an array');
+    if (s.categories && !Array.isArray(s.categories)) errors.push('categories must be an array');
+    return errors;
   }
 
   function getParam(name) {
