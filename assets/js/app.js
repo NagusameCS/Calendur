@@ -655,8 +655,9 @@
         push('<g class="ev-day"><title>' + tipParts.join('&#10;') + '</title>');
       }
 
-      // Cell background + border
-      push(rect(cx, cy, g.cellW, g.cellH, cellBg, borderStroke, 0, 0.6));
+      // Cell background + border (with data-date for click-to-add)
+      var dateAttr = inMonth ? ' data-date="' + ymd(yr, m, dayNum) + '"' : '';
+      push(rect(cx, cy, g.cellW, g.cellH, cellBg, borderStroke, 0, 0.6, 'class="cal-cell"' + dateAttr));
 
       if (inMonth) {
         const key = ymd(yr, m, dayNum);
@@ -1663,6 +1664,64 @@
     toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
   }
 
+  /* ---------- Preview click-to-add / drag-to-range ---------- */
+  var _dragStart = null, _dragCurrent = null, _dragging = false;
+
+  function initPreviewClick() {
+    var stage = $('#preview-stage');
+    if (!stage) return;
+    stage.addEventListener('mousedown', function(e) {
+      var cell = e.target.closest('[data-date]');
+      if (!cell) return;
+      var date = cell.getAttribute('data-date');
+      if (!date) return;
+      _dragStart = date; _dragCurrent = date; _dragging = true;
+      highlightDragRange(date, date);
+      e.preventDefault();
+    });
+    stage.addEventListener('mousemove', function(e) {
+      if (!_dragging) return;
+      var cell = e.target.closest('[data-date]');
+      if (!cell) return;
+      var date = cell.getAttribute('data-date');
+      if (!date || date === _dragCurrent) return;
+      _dragCurrent = date;
+      highlightDragRange(_dragStart, _dragCurrent);
+    });
+    stage.addEventListener('mouseup', function() {
+      if (!_dragging) return;
+      _dragging = false; clearDragHighlight();
+      var s = _dragStart, e = _dragCurrent;
+      if (!s) return;
+      if (e && e < s) { var t = s; s = e; e = t; }
+      if ($('#e-start')) $('#e-start').value = s;
+      if ($('#e-end')) $('#e-end').value = e || s;
+      if ($('#e-name')) $('#e-name').focus();
+      _dragStart = null; _dragCurrent = null;
+    });
+    stage.addEventListener('mouseleave', function() {
+      if (_dragging) { _dragging = false; clearDragHighlight(); _dragStart = null; }
+    });
+  }
+
+  function highlightDragRange(from, to) {
+    if (!from || !to) return;
+    var a = from, b = to;
+    if (b < a) { var t = a; a = b; b = t; }
+    clearDragHighlight();
+    var cells = document.querySelectorAll('[data-date]');
+    for (var i = 0; i < cells.length; i++) {
+      var d = cells[i].getAttribute('data-date');
+      if (d >= a && d <= b) cells[i].classList.add('drag-highlight');
+    }
+  }
+
+  function clearDragHighlight() {
+    var cells = document.querySelectorAll('.drag-highlight');
+    for (var i = 0; i < cells.length; i++) cells[i].classList.remove('drag-highlight');
+  }
+
+
   /* ---------- Init ---------- */
   function init() {
     populateSelects();
@@ -1675,6 +1734,7 @@
     if (isViewOnly()) enterViewOnly();
     // If embed mode, strip everything but the calendar
     if (getParam('embed') === '1') enterEmbedMode();
+    initPreviewClick();
     renderNow();
     // Auto-download if ?auto=1 is set
     if (getParam('auto') === '1') {
