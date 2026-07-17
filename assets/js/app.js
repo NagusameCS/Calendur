@@ -399,7 +399,7 @@
         p('<g transform="translate(' + r2(g.margin) + ',' + r2(totalH - g.margin - qs) + ')">' +
           '<rect x="-4" y="-4" width="' + (qs + 8) + '" height="' + (qs + 8) + '" fill="' + th.page + '" rx="4"/>' +
           '<image x="0" y="0" width="' + qs + '" height="' + qs + '" ' +
-          'href="https://api.qrserver.com/v1/create-qr-code/?size=' + qs + 'x' + qs + '&data=' + encodeURIComponent(qrUrl) + '" ' +
+          'href="https://api.qrserver.com/v1/create-qr-code/?size=' + qs + 'x' + qs + '&amp;data=' + encodeURIComponent(qrUrl) + '" ' +
           'preserveAspectRatio="none"/>' +
           '</g>');
       } catch (e) {}
