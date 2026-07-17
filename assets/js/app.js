@@ -566,8 +566,19 @@
           if (state.showLabels) {
             const starting = evs.filter((e) => e.start === key);
             if (starting.length) {
-              const c = categoryById(starting[0].categoryId);
-              push(text(cx + g.cellW - 5, cy + 15, esc(clip(starting[0].name || '', 9)), c ? c.color : th.muted, 7.5, 700, 'end'));
+              const maxLabels = 3;
+              const labelH = 8;
+              const baseY = cy + 23;
+              for (let li = 0; li < Math.min(starting.length, maxLabels); li++) {
+                const c = categoryById(starting[li].categoryId);
+                push(text(cx + g.cellW - 4, baseY + li * labelH,
+                  esc(clip(starting[li].name || '', 8)),
+                  c ? c.color : th.muted, 6.5, 600, 'end'));
+              }
+              if (starting.length > maxLabels) {
+                push(text(cx + g.cellW - 4, baseY + maxLabels * labelH,
+                  '+' + (starting.length - maxLabels), th.muted, 6, 600, 'end'));
+              }
             }
           }
         }
