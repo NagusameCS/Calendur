@@ -11,6 +11,25 @@
   const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const STORAGE_KEY = 'calendur.state.v1';
 
+  // Locale data: month names (full), weekday names (3-char)
+  const LOCALES = {
+    en: { name:'English', months:MONTHS, weekdays:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'] },
+    es: { name:'Español', months:['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'], weekdays:['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'] },
+    fr: { name:'Français', months:['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'], weekdays:['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'] },
+    de: { name:'Deutsch', months:['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'], weekdays:['So','Mo','Di','Mi','Do','Fr','Sa'] },
+    ja: { name:'日本語', months:['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'], weekdays:['日','月','火','水','木','金','土'] },
+    zh: { name:'中文', months:['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月'], weekdays:['日','一','二','三','四','五','六'] },
+    pt: { name:'Português', months:['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'], weekdays:['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'] },
+    it: { name:'Italiano', months:['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'], weekdays:['Dom','Lun','Mar','Mer','Gio','Ven','Sab'] },
+    ru: { name:'Русский', months:['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'], weekdays:['Вс','Пн','Вт','Ср','Чт','Пт','Сб'] },
+    ar: { name:'العربية', months:['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'], weekdays:['أحد','إثنين','ثلاثاء','أربعاء','خميس','جمعة','سبت'] },
+    ko: { name:'한국어', months:['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'], weekdays:['일','월','화','수','목','금','토'] },
+    hi: { name:'हिन्दी', months:['जनवरी','फरवरी','मार्च','अप्रैल','मई','जून','जुलाई','अगस्त','सितंबर','अक्टूबर','नवंबर','दिसंबर'], weekdays:['रवि','सोम','मंगल','बुध','गुरु','शुक्र','शनि'] },
+  };
+
+  function localeMonths() { var l=LOCALES[state.language||'en']; return l?l.months:MONTHS; }
+  function localeWeekdays() { var l=LOCALES[state.language||'en']; return l?l.weekdays:WEEKDAYS; }
+
   // SVG geometry (in SVG user units — scaled by state.fontScale at build time)
   const G = {
     cellW: 46, cellH: 42,
@@ -58,6 +77,7 @@
       columns: 'auto',
       weekStart: 0,
       theme: 'noir',
+      language: 'en',
       shadeWeekend: true,
       highlightToday: false,
       showLabels: false,
@@ -350,7 +370,7 @@
       html += '<div class="cal-subtitle" style="color:' + th.sub + ';background:' + th.page + ';width:100%">' + esc(state.subtitle) + '</div>';
     }
 
-    const wdShort = WEEKDAYS.map((d) => d.toUpperCase().slice(0, 3));
+    const wdShort = localeWeekdays();
 
     for (let k = 0; k < months; k++) {
       const ym = monthAt(k);
@@ -361,7 +381,7 @@
       const borderStyle = state.showBorders ? '1px solid ' + th.line : 'none';
 
       html += '<div class="cal-month" style="background:' + th.month + ';border:' + borderStyle + '">';
-      let mLabel = MONTHS[m] + ' ' + yr;
+      let mLabel=localeMonths()[m]+' '+yr;
       if (m === 1 && isLeapYear(yr)) mLabel += ' ⋈';
       html += '<div class="cal-month-name" style="color:' + th.header + '">' + esc(mLabel) + '</div>';
       html += '<table><thead><tr>';
@@ -503,7 +523,7 @@
     push(rect(x, y, innerW + g.monthPad * 2, g.monthHead + g.weekdayHead + g.weeks * g.cellH + g.monthPad * 2, th.month, borderStroke, 8));
 
     // Month name
-    let monthLabel = MONTHS[m] + ' ' + yr;
+    const lcMonths=localeMonths(); let monthLabel=lcMonths[m]+' '+yr;
     if (m === 1 && isLeapYear(yr)) monthLabel += ' \u22c8';
     push(text(x + (innerW + g.monthPad * 2) / 2, innerY + (g.monthHead * 0.66), esc(monthLabel), th.header, 15, 600, 'middle'));
 
@@ -512,7 +532,7 @@
     for (let i = 0; i < 7; i++) {
       const cx = innerX + i * g.cellW + g.cellW / 2;
       const isWknd = state.weekendDays && state.weekendDays.indexOf(wk[i]) !== -1;
-      push(text(cx, wRowY + (g.weekdayHead * 0.68), WEEKDAYS[wk[i]].toUpperCase().slice(0, 3), isWknd ? th.muted : th.sub, 9.5, 600, 'middle'));
+      push(text(cx, wRowY + (g.weekdayHead * 0.68), localeWeekdays()[wk[i]], isWknd ? th.muted : th.sub, 9.5, 600, 'middle'));
     }
 
     // Day grid
@@ -1173,9 +1193,11 @@
 
   function populateSelects() {
     const sm = $('#c-start-month');
-    sm.innerHTML = MONTHS.map((m, i) => '<option value="' + i + '">' + m + '</option>').join('');
+    sm.innerHTML = localeMonths().map((m,i)=>'<option value="'+i+'">'+m+'</option>').join('');
     const th = $('#c-theme');
     th.innerHTML = Object.keys(THEMES).map((k) => '<option value="' + k + '">' + THEMES[k].name + '</option>').join('');
+    const lg = $('#c-language');
+    lg.innerHTML = Object.keys(LOCALES).map((k) => '<option value="' + k + '">' + LOCALES[k].name + '</option>').join('');
     const pal = $('#c-palette');
     pal.innerHTML = '<option value="">Custom…</option>' + Object.keys(PALETTES).map((k) => '<option value="' + k + '">' + PALETTES[k].name + '</option>').join('');
   }
@@ -1190,6 +1212,7 @@
     $('#c-columns').value = state.columns;
     $('#c-weekstart').value = state.weekStart;
     $('#c-theme').value = state.theme;
+    $('#c-language').value = state.language || 'en';
     $('#c-weekend').checked = state.shadeWeekend;
     $('#c-today').checked = state.highlightToday;
     $('#c-labels').checked = state.showLabels;
@@ -1241,7 +1264,7 @@
     [0,1,2,3,4,5,6].forEach((d) => {
       const chip = document.createElement('span');
       chip.className = 'weekend-chip' + (state.weekendDays.indexOf(d) !== -1 ? ' active' : '');
-      chip.textContent = WEEKDAYS[d].slice(0, 2);
+      chip.textContent = localeWeekdays()[d];
       chip.addEventListener('click', () => {
         const idx = state.weekendDays.indexOf(d);
         if (idx === -1) state.weekendDays.push(d);
@@ -1319,6 +1342,8 @@
     on('#c-columns', 'change', (v) => state.columns = v);
     on('#c-weekstart', 'change', (v) => state.weekStart = parseInt(v, 10));
     on('#c-theme', 'change', (v) => state.theme = v);
+    on('#c-language', 'change', (v) => state.language = v);
+    on('#c-language', 'change', (v) => state.language = v);
     on('#c-fontscale', 'change', (v) => { state.fontScale = parseFloat(v) || 1; });
     on('#c-todaycolor', 'input', (v) => { state.todayColor = v; });
     onCheck('#c-weekend', (v) => state.shadeWeekend = v);
@@ -1596,6 +1621,7 @@
     if (p('title'))      state.title = decodeURIComponent(p('title'));
     if (p('subtitle'))   state.subtitle = decodeURIComponent(p('subtitle'));
     if (p('notes'))      state.notes = decodeURIComponent(p('notes'));
+    if (p('language')) { const l=p('language'); if (LOCALES[l]) state.language = l; }
     if (p('theme'))      { const t = p('theme'); if (THEMES[t]) state.theme = t; }
     if (p('weekstart'))  state.weekStart = p('weekstart') === '1' ? 1 : 0;
     if (p('weekend'))    state.shadeWeekend = p('weekend') !== '0';
