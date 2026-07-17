@@ -198,24 +198,35 @@
       // Handle recurring events
       var repeat = ev.repeat;
       if (repeat && repeat !== 'none') {
-        var interval = repeat === 'biweekly' ? 14 : repeat === 'weekly' ? 7 : repeat === 'monthly' ? 30 : 0;
+        var interval = repeat === 'biweekly' ? 14 : repeat === 'weekly' ? 7 : 0;
+        if (repeat === 'monthly') {
+          // Monthly: increment month, keep same day (clamped to month end)
+          var calendarEnd = new Date(Date.UTC(state.year, state.startMonth + state.months, 0));
+          var rd = new Date(startDate);
+          while (rd <= calendarEnd && count < 1000) {
+            var key = ymd(rd.getUTCFullYear(), rd.getUTCMonth(), rd.getUTCDate());
+            if (!_eventIndex.has(key)) _eventIndex.set(key, []);
+            _eventIndex.get(key).push(ev);
+            count++;
+            // Next month, same day
+            var targetDay = startDate.getUTCDate();
+            rd.setUTCMonth(rd.getUTCMonth() + 1);
+            rd.setUTCDate(1); // safe reset
+            var dim = new Date(Date.UTC(rd.getUTCFullYear(), rd.getUTCMonth() + 1, 0)).getUTCDate();
+            rd.setUTCDate(Math.min(targetDay, dim));
+          }
+          return;
+        }
         if (interval > 0) {
-          // Expand from start date through end of calendar view
+          // Weekly/biweekly
           var calendarEnd = new Date(Date.UTC(state.year, state.startMonth + state.months, 0));
           for (var rd = new Date(startDate); rd <= calendarEnd && count < 1000; rd.setUTCDate(rd.getUTCDate() + interval)) {
-            // For monthly, snap to same day of month
-            if (repeat === 'monthly') {
-              rd.setUTCDate(startDate.getUTCDate());
-              if (rd.getUTCDate() < startDate.getUTCDate()) rd.setUTCDate(1); // handle month-end overflow
-            }
             var key = ymd(rd.getUTCFullYear(), rd.getUTCMonth(), rd.getUTCDate());
-            if (rd >= startDate) {
-              if (!_eventIndex.has(key)) _eventIndex.set(key, []);
-              _eventIndex.get(key).push(ev);
-            }
+            if (!_eventIndex.has(key)) _eventIndex.set(key, []);
+            _eventIndex.get(key).push(ev);
             count++;
           }
-          return; // skip the standard range expansion
+          return;
         }
       }
 
@@ -356,7 +367,7 @@
       const by = gridTop + row * (blockH + g.gap);
       // Check for term divider before this row
       for (var td = 0; td < termDivs.length; td++) {
-        if (termDivs[td].row === row && col === 0 && td.drawn !== true) {
+        if (termDivs[td].row === row && col === 0 && !termDivs[td].drawn) {
           var divY = by - g.gap / 2;
           p('<line x1="' + r2(g.margin) + '" y1="' + r2(divY) + '" x2="' + r2(totalW - g.margin) + '" y2="' + r2(divY) + '" stroke="' + th.line + '" stroke-width="1.5" stroke-dasharray="6,3"/>');
           p(text(totalW / 2, divY - 6, esc(termDivs[td].label), th.sub, 13, 600, 'middle'));
@@ -884,17 +895,17 @@
       const sv = $('#x-scale').value;
       scale = scaleFor(sv);
     }
-    const w = Math.round(currentBuild.width * scale);
-    const h = Math.round(currentBuild.height * scale);
+    const w = Math.round((currentBuild && currentBuild.width || 800) * scale);
+    const h = Math.round((currentBuild && currentBuild.height || 600) * scale);
     const label = $('#x-scale option:checked').textContent;
     $('#x-dims').textContent = fmt === 'svg'
-      ? 'Vector \u2014 scales to any size (' + currentBuild.width + '\u00d7' + currentBuild.height + ' base).'
+      ? 'Vector \u2014 scales to any size (' + (currentBuild && currentBuild.width || 0) + '\u00d7' + (currentBuild && currentBuild.height || 0) + ' base).'
       : 'Output: ' + w + '\u00d7' + h + ' px (' + label + ')';
   }
 
 
   function scaleFor(sv) {
-    if (sv === 'custom') return parseFloat($('#x-width').value) / (currentBuild && currentBuild.width || 1);
+    if (sv === 'custom') { var cw = parseFloat($('#x-width').value) || 3000; return cw / (currentBuild && currentBuild.width || 1); }
     if (sv === 'a4')    return 2480 / (currentBuild && currentBuild.width || 1);
     if (sv === 'letter') return 2550 / (currentBuild && currentBuild.width || 1);
     if (sv === 'tabloid') return 3300 / (currentBuild && currentBuild.width || 1);

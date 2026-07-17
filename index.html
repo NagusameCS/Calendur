@@ -247,8 +247,11 @@
           </label>
         </div>
         <label class="field hidden" id="x-width-wrap">
-          <span>Custom width (px)</span>
-          <input type="number" id="x-width" min="200" max="20000" step="10" value="3000" />
+          <span>Custom size (W x H px)</span>
+          <div class="field-row">
+            <input type="number" id="x-width" min="200" max="20000" step="10" value="3000" placeholder="Width" />
+            <input type="number" id="x-height" min="200" max="20000" step="10" value="2000" placeholder="Height" />
+          </div>
         </label>
         <p class="ctl-hint" id="x-dims"></p>
         <button id="btn-download" class="btn btn-primary btn-block">Download</button>
