@@ -571,11 +571,19 @@
       sorted.forEach(function(ev, idx) {
         var cat = categoryById(ev.categoryId);
         var range = ev.start === ev.end ? ev.start : ev.start + ' \u2192 ' + ev.end;
+        // Calculate duration in days (inclusive)
+        var durDays = 0;
+        try {
+          var ds = new Date(ev.start + 'T00:00:00Z');
+          var de = new Date(ev.end + 'T00:00:00Z');
+          durDays = Math.round((de - ds) / 86400000) + 1;
+        } catch (e) { durDays = 1; }
+        var durStr = durDays === 1 ? '1 day' : durDays + ' days';
         timelineRows += '<div class="tl-card" data-ev-idx="' + idx + '" data-name="' + esc((ev.name||'').toLowerCase()) + '" data-cat="' + esc((cat?cat.label:'').toLowerCase()) + '" data-desc="' + esc((ev.description||'').toLowerCase()) + '" data-dates="' + esc(ev.start + ' ' + ev.end) + '">' +
           '<span class="tl-dot" style="background:' + (cat ? cat.color : muted) + '"></span>' +
           '<div class="tl-info">' +
             '<div class="tl-name">' + esc(ev.name || '(untitled)') + '</div>' +
-            '<div class="tl-range">' + esc(range) + (cat ? ' <span class="tl-cat">\u00b7 ' + esc(cat.label) + '</span>' : '') + '</div>' +
+            '<div class="tl-range">' + esc(range) + (cat ? ' <span class="tl-cat">\u00b7 ' + esc(cat.label) + '</span>' : '') + ' <span class="tl-dur">\u00b7 ' + durStr + '</span></div>' +
             (ev.description ? '<div class="tl-desc">' + esc(ev.description) + '</div>' : '') +
           '</div>' +
         '</div>';
@@ -624,6 +632,7 @@
       '.tl-name{font-size:0.84rem;font-weight:600;color:' + fg + ';line-height:1.3}\n' +
       '.tl-range{font-size:0.72rem;color:' + muted + ';font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin-top:2px}\n' +
       '.tl-cat{color:' + sub + '}\n' +
+      '.tl-dur{color:' + muted + ';font-weight:500}\n' +
       '.tl-desc{font-size:0.74rem;color:' + sub + ';margin-top:4px;line-height:1.4;font-style:italic}\n' +
       '.tl-empty{text-align:center;padding:30px;color:' + muted + ';font-size:0.82rem}\n' +
       '.tl-no-results{text-align:center;padding:20px;color:' + muted + ';font-size:0.78rem;display:none}\n' +
