@@ -181,6 +181,7 @@
           <button id="btn-import-csv" class="btn btn-ghost btn-sm" title="Bulk import from CSV or tab-separated text">CSV</button>
           <button id="btn-import-json" class="btn btn-ghost btn-sm" title="Paste or import JSON">JSON</button>
           <button id="btn-import-gh" class="btn btn-ghost btn-sm" title="Import from a GitHub raw URL or repo">GitHub</button>
+          <button id="btn-scrape" class="btn btn-ghost btn-sm" title="Scrape a schedule webpage for dates &amp; events">Scrape</button>
         </div>
         <div id="event-list" class="event-list"></div>
         <div class="csv-panel hidden" id="csv-panel">
@@ -202,6 +203,21 @@
           <input type="text" id="gh-url" class="event-filter" placeholder="https://raw.githubusercontent.com/user/repo/main/calendar.json" />
           <button id="btn-import-gh-go" class="btn btn-secondary btn-block">Fetch &amp; import</button>
           <p class="ctl-hint" style="margin-top:6px">Supports .json (Calendur config or array of events) and .csv files.</p>
+        </div>
+        <div class="gh-panel hidden" id="scrape-panel">
+          <p class="ctl-hint">Paste a schedule URL to scrape dates &amp; events from any webpage.</p>
+          <input type="text" id="scrape-url" class="event-filter" placeholder="https://registrar.someuniversity.edu/academic-calendar" />
+          <button id="btn-scrape-go" class="btn btn-primary btn-block">Scrape schedule</button>
+          <div class="scrape-status hidden" id="scrape-status"></div>
+          <div class="scrape-results hidden" id="scrape-results">
+            <div class="scrape-header">
+              <span class="scrape-count" id="scrape-count"></span>
+              <button id="btn-scrape-approve-all" class="btn btn-sm btn-secondary">Approve all</button>
+              <button id="btn-scrape-clear" class="btn btn-sm btn-ghost">Clear</button>
+            </div>
+            <div class="scrape-list" id="scrape-list"></div>
+            <button id="btn-scrape-import" class="btn btn-primary btn-block">Import approved</button>
+          </div>
         </div>
       </section>
 

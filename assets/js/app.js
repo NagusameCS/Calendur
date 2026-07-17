@@ -1322,7 +1322,7 @@ function downloadQr() {
   function togglePanel(id) {
     const el = $('#' + id);
     if (!el) return;
-    ['csv-panel','json-panel','preset-panel','gh-panel'].forEach((pid) => {
+    ['csv-panel','json-panel','preset-panel','gh-panel','scrape-panel'].forEach((pid) => {
       if (pid !== id) $('#' + pid)?.classList.add('hidden');
     });
     el.classList.toggle('hidden');
@@ -1458,6 +1458,291 @@ function downloadQr() {
     });
     renderEvents(); render();
     toast('Imported ' + added + ' event' + (added !== 1 ? 's' : '') + ' from GitHub');
+  }
+
+  /* ---------- Web scraper for schedule pages ---------- */
+  var _scrapedEvents = []; // {name,start,end,categoryId,approved:bool}
+
+  /** Date pattern matchers — returns {y,m,d} or null. m is 0-indexed. */
+  function parseDate(str) {
+    // ISO: 2026-09-15 or 2026/09/15
+    var m1 = str.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+    if (m1) return { y: +m1[1], m: +m1[2] - 1, d: +m1[3] };
+    // US: Month Day, Year — "January 15, 2026" or "Jan 15, 2026"
+    var m2 = str.match(/^([A-Z][a-z]+)\s+(\d{1,2}),?\s*(\d{4})$/);
+    if (m2) { var mi = MONTHS.indexOf(m2[1]); if (mi >= 0) return { y: +m2[3], m: mi, d: +m2[2] }; }
+    // US short: "Jan 15"
+    var m3 = str.match(/^([A-Z][a-z]{2})\s+(\d{1,2})$/);
+    if (m3) { var mi3 = MONTHS.findIndex(function(m){return m.slice(0,3)===m3[1];}); if (mi3>=0) return { y: state.year, m: mi3, d: +m3[2] }; }
+    // US numeric: 1/15/2026 or 01/15/26
+    var m4 = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m4) { var y4 = +m4[3]; if (y4 < 100) y4 += 2000; return { y: y4, m: +m4[1] - 1, d: +m4[2] }; }
+    // Day Month Year: "15 January 2026" or "15 Jan 2026"
+    var m5 = str.match(/^(\d{1,2})\s+([A-Z][a-z]+)\s+(\d{4})$/);
+    if (m5) { var mi5 = MONTHS.indexOf(m5[2]); if (mi5 >= 0) return { y: +m5[3], m: mi5, d: +m5[1] }; }
+    return null;
+  }
+
+  /** Find date-like substrings in free text. Returns array of {y,m,d,raw}. */
+  function extractDates(text) {
+    var found = [];
+    // ISO dates anywhere in text
+    var re = /(\d{4}-\d{1,2}-\d{1,2})/g; var m;
+    while ((m = re.exec(text)) !== null) { var d = parseDate(m[1]); if (d) found.push(d); }
+    // US full dates: Month Day, Year
+    var re2 = /([A-Z][a-z]+)\s+(\d{1,2}),?\s*(\d{4})/g;
+    while ((m = re2.exec(text)) !== null) { var d2 = parseDate(m[0]); if (d2) found.push(d2); }
+    // Short: Mon DD (within context)
+    var re3 = /\b([A-Z][a-z]{2})\s+(\d{1,2})\b/g;
+    while ((m = re3.exec(text)) !== null) { var d3 = parseDate(m[0]); if (d3) found.push(d3); }
+    return found;
+  }
+
+  /** Fetch and scrape a schedule page. */
+  async function scrapeUrl() {
+    var url = ($('#scrape-url') ? $('#scrape-url').value.trim() : '');
+    if (!url) { toast('Paste a URL first'); return; }
+    // Ensure https:// prefix
+    if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+
+    var statusEl = $('#scrape-status');
+    var resultsEl = $('#scrape-results');
+    var goBtn = $('#btn-scrape-go');
+    statusEl.classList.remove('hidden', 'error');
+    statusEl.textContent = 'Fetching page…';
+    resultsEl.classList.add('hidden');
+    goBtn.disabled = true;
+    goBtn.textContent = 'Scraping…';
+
+    var html = '';
+    try {
+      // Try via allorigins CORS proxy (public service)
+      var proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+      var ctrl = new AbortController();
+      var tid = setTimeout(function() { ctrl.abort(); }, 12000);
+      var resp = await fetch(proxyUrl, { signal: ctrl.signal });
+      clearTimeout(tid);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      html = await resp.text();
+    } catch (e) {
+      // Fallback: try direct fetch (may fail with CORS on some pages)
+      try {
+        var ctrl2 = new AbortController();
+        var tid2 = setTimeout(function() { ctrl2.abort(); }, 8000);
+        var resp2 = await fetch(url, { signal: ctrl2.signal });
+        clearTimeout(tid2);
+        if (!resp2.ok) throw new Error('HTTP ' + resp2.status);
+        html = await resp2.text();
+      } catch (e2) {
+        // Fallback 2: try corsproxy.io
+        try {
+          var proxyUrl2 = 'https://corsproxy.io/?' + encodeURIComponent(url);
+          var ctrl3 = new AbortController();
+          var tid3 = setTimeout(function() { ctrl3.abort(); }, 10000);
+          var resp3 = await fetch(proxyUrl2, { signal: ctrl3.signal });
+          clearTimeout(tid3);
+          if (!resp3.ok) throw new Error('HTTP ' + resp3.status);
+          html = await resp3.text();
+        } catch (e3) {
+          statusEl.textContent = 'Could not fetch this page. The site may block scraping, or the URL may be unreachable. Try a different URL or paste the schedule data manually via CSV.';
+          statusEl.classList.add('error');
+          goBtn.disabled = false; goBtn.textContent = 'Scrape schedule';
+          return;
+        }
+      }
+    }
+
+    if (!html || html.length < 100) {
+      statusEl.textContent = 'Page returned empty or too little content.';
+      statusEl.classList.add('error');
+      goBtn.disabled = false; goBtn.textContent = 'Scrape schedule';
+      return;
+    }
+
+    statusEl.textContent = 'Parsing tables & dates…';
+    // Allow UI to update
+    await new Promise(function(r) { setTimeout(r, 60); });
+
+    // Parse HTML into DOM
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(html, 'text/html');
+
+    // Strategy 1: Look for <table> rows containing dates
+    var tables = doc.querySelectorAll('table');
+    var candidates = [];
+    var seenTexts = new Set();
+
+    tables.forEach(function(table) {
+      var rows = table.querySelectorAll('tr');
+      rows.forEach(function(row) {
+        var cells = row.querySelectorAll('td, th');
+        if (cells.length < 2) return;
+        var cellTexts = [];
+        cells.forEach(function(c) { cellTexts.push((c.textContent || '').trim()); });
+
+        // Find which cells contain dates; capture start & end from same cell if range
+        var startDate = null, endDate = null;
+        var skipCols = new Set();
+        for (var ci = 0; ci < cellTexts.length; ci++) {
+          var dates = extractDates(cellTexts[ci]);
+          if (!dates.length) continue;
+          skipCols.add(ci);
+          // Sort dates found in this cell chronologically
+          dates.sort(function(a, b) { return (a.y*10000+a.m*100+a.d) - (b.y*10000+b.m*100+b.d); });
+          var dFirst = dates[0], dLast = dates[dates.length - 1];
+          if (!startDate) { startDate = dFirst; endDate = dLast; }
+          else {
+            // Extend endDate if this cell's last date is later
+            if (dLast.y > endDate.y || (dLast.y === endDate.y && dLast.m > endDate.m) || (dLast.y === endDate.y && dLast.m === endDate.m && dLast.d > endDate.d)) {
+              endDate = dLast;
+            }
+          }
+        }
+
+        if (!startDate) return;
+
+        // Name: pick the longest non-date cell
+        var nameCandidates = [];
+        cellTexts.forEach(function(t, i) {
+          if (!skipCols.has(i) && t.length > 2 && t.length < 200) nameCandidates.push(t);
+        });
+        var name = nameCandidates.length ? nameCandidates.sort(function(a,b){return b.length-a.length;})[0] : (cellTexts[0] || 'Event');
+
+        // Deduplicate by name+start
+        var key = name + '|' + ymd(startDate.y, startDate.m, startDate.d);
+        if (seenTexts.has(key)) return;
+        seenTexts.add(key);
+
+        // Guess category from keywords, fall back to "Event" category
+        var catLabel = guessCategory(name);
+        var defaultCat = state.categories.find(function(c) { return c.label === 'Event'; }) || state.categories[0];
+        var catId = defaultCat ? defaultCat.id : null;
+        if (catLabel) {
+          var foundCat = state.categories.find(function(c) { return c.label.toLowerCase() === catLabel.toLowerCase(); });
+          if (foundCat) catId = foundCat.id;
+        }
+
+        candidates.push({
+          name: name.replace(/\s+/g, ' ').trim(),
+          start: ymd(startDate.y, startDate.m, startDate.d),
+          end: ymd(endDate.y, endDate.m, endDate.d),
+          categoryId: catId,
+          approved: true
+        });
+      });
+    });
+
+    // Strategy 2: If no tables found, scan for date-like patterns in list items or paragraphs
+    if (!candidates.length) {
+      var items = doc.querySelectorAll('li, p, div.event, .event-item, .calendar-event');
+      items.forEach(function(el) {
+        var text = (el.textContent || '').trim();
+        if (text.length < 5 || text.length > 300) return;
+        var dates = extractDates(text);
+        if (!dates.length) return;
+        // Remove date parts to get name
+        var name = text.replace(/\d{4}[-\/]\d{1,2}[-\/]\d{1,2}/g, '')
+          .replace(/[A-Z][a-z]+\s+\d{1,2},?\s*\d{4}/g, '')
+          .replace(/\b[A-Z][a-z]{2}\s+\d{1,2}\b/g, '')
+          .replace(/[–—\-–]\s*[A-Za-z]+\s*\d+/g, '')
+          .replace(/\s{2,}/g, ' ').trim();
+        if (!name || name.length < 3) name = text.substring(0, 60);
+
+        var key = name + '|' + ymd(dates[0].y, dates[0].m, dates[0].d);
+        if (seenTexts.has(key)) return;
+        seenTexts.add(key);
+
+        var endD = dates.length >= 2 ? dates[1] : dates[0];
+        var catLabel2 = guessCategory(name);
+        var defCat2 = state.categories.find(function(c) { return c.label === 'Event'; }) || state.categories[0];
+        var catId2 = defCat2 ? defCat2.id : null;
+        if (catLabel2) {
+          var fc2 = state.categories.find(function(c) { return c.label.toLowerCase() === catLabel2.toLowerCase(); });
+          if (fc2) catId2 = fc2.id;
+        }
+        candidates.push({
+          name: name.substring(0, 80),
+          start: ymd(dates[0].y, dates[0].m, dates[0].d),
+          end: ymd(endD.y, endD.m, endD.d),
+          categoryId: catId2,
+          approved: true
+        });
+      });
+    }
+
+    if (!candidates.length) {
+      statusEl.textContent = 'No structured dates found on this page. Try a different URL or import via CSV instead.';
+      statusEl.classList.add('error');
+      goBtn.disabled = false; goBtn.textContent = 'Scrape schedule';
+      return;
+    }
+
+    // Sort by start date
+    candidates.sort(function(a, b) { return a.start.localeCompare(b.start); });
+    _scrapedEvents = candidates;
+    renderScrapeResults();
+    statusEl.textContent = 'Found ' + candidates.length + ' potential event' + (candidates.length !== 1 ? 's' : '') + '. Review below.';
+    resultsEl.classList.remove('hidden');
+    goBtn.disabled = false; goBtn.textContent = 'Scrape schedule';
+  }
+
+  /** Guess a category label from event name keywords. */
+  function guessCategory(name) {
+    var n = name.toLowerCase();
+    if (/holiday|christmas|new year|thanksgiving|independence|memorial|labor|mlk|president|veteran|juneteenth|columbus|easter|halloween|valentine/i.test(n)) return 'Holiday';
+    if (/break|recess|vacation|spring break|winter break|summer break|fall break|mid-winter/i.test(n)) return 'Break';
+    if (/exam|final|midterm|assessment|test/i.test(n)) return 'Exam';
+    if (/registration|enroll|orientation|commencement|graduation|convocation|deadline|due|add|drop|withdraw/i.test(n)) return 'Event';
+    return '';
+  }
+
+  function renderScrapeResults() {
+    var list = $('#scrape-list');
+    var countEl = $('#scrape-count');
+    if (!list) return;
+    list.innerHTML = '';
+    var approved = 0;
+    _scrapedEvents.forEach(function(ev, i) {
+      if (ev.approved) approved++;
+      var cat = categoryById(ev.categoryId);
+      var div = document.createElement('div');
+      div.className = 'scrape-item' + (ev.approved ? '' : ' rejected');
+      div.innerHTML =
+        '<input type="checkbox" ' + (ev.approved ? 'checked' : '') + ' data-idx="' + i + '">' +
+        '<span class="scrape-name">' + esc(ev.name) + '</span>' +
+        '<span class="scrape-dates">' + (ev.start === ev.end ? ev.start : ev.start + '–' + ev.end) + '</span>' +
+        '<span class="scrape-cat">' + (cat ? esc(cat.label) : '') + '</span>';
+      div.querySelector('input').addEventListener('change', function(e) {
+        _scrapedEvents[i].approved = e.target.checked;
+        div.classList.toggle('rejected', !e.target.checked);
+        renderScrapeResults();
+      });
+      list.appendChild(div);
+    });
+    countEl.textContent = approved + ' / ' + _scrapedEvents.length + ' approved';
+  }
+
+  function approveAllScraped() {
+    _scrapedEvents.forEach(function(ev) { ev.approved = true; });
+    renderScrapeResults();
+  }
+
+  function importScraped() {
+    var toImport = _scrapedEvents.filter(function(ev) { return ev.approved; });
+    if (!toImport.length) { toast('No events approved'); return; }
+    toImport.forEach(function(ev) {
+      state.events.push({
+        id: nextId(), name: ev.name, description: '',
+        repeat: 'none', categoryId: ev.categoryId,
+        start: ev.start, end: ev.end < ev.start ? ev.start : ev.end
+      });
+    });
+    var count = toImport.length;
+    _scrapedEvents = [];
+    $('#scrape-results').classList.add('hidden');
+    $('#scrape-status').classList.add('hidden');
+    renderEvents(); render();
+    toast('Imported ' + count + ' event' + (count !== 1 ? 's' : ''));
   }
 
   /* ---------- Quick-add presets ---------- */
@@ -1749,6 +2034,22 @@ function downloadQr() {
       togglePanel('gh-panel');
     });
     $('#btn-import-gh-go').addEventListener('click', importFromGitHub);
+
+    // Web scraper toggle
+    $('#btn-scrape').addEventListener('click', () => {
+      togglePanel('scrape-panel');
+    });
+    $('#btn-scrape-go').addEventListener('click', scrapeUrl);
+    $('#btn-scrape-approve-all').addEventListener('click', approveAllScraped);
+    $('#btn-scrape-clear').addEventListener('click', () => {
+      _scrapedEvents = [];
+      $('#scrape-results').classList.add('hidden');
+      $('#scrape-status').classList.add('hidden');
+      $('#scrape-list').innerHTML = '';
+    });
+    $('#btn-scrape-import').addEventListener('click', importScraped);
+    // Allow Enter in scrape URL input
+    $('#scrape-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') scrapeUrl(); });
 
     // Quick-add presets toggle
     $('#btn-quick-add').addEventListener('click', () => {
