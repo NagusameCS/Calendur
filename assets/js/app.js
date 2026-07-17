@@ -544,7 +544,7 @@
         // Day number
         const align = state.dayAlign || 'start';
         const numX = align === 'start' ? (cx + 6) : align === 'end' ? (cx + g.cellW - 6) : (cx + g.cellW / 2);
-        push(text(numX, cy + 15, dayNum, th.text, 12, 500, align));
+        push(text(numX, cy + 13, dayNum, th.text, 12, 500, align));
 
         // Today ring
         if (state.highlightToday && key === tKey) {
@@ -566,13 +566,13 @@
           if (state.showLabels) {
             const starting = evs.filter((e) => e.start === key);
             if (starting.length) {
-              const maxLabels = 3;
-              const labelH = 8;
-              const baseY = cy + 23;
+              const maxLabels = 2;
+              const labelH = 7;
+              const baseY = cy + 26;
               for (let li = 0; li < Math.min(starting.length, maxLabels); li++) {
                 const c = categoryById(starting[li].categoryId);
                 push(text(cx + g.cellW - 4, baseY + li * labelH,
-                  esc(clip(starting[li].name || '', 8)),
+                  esc(clip(starting[li].name || '', 7)),
                   c ? c.color : th.muted, 6.5, 600, 'end'));
               }
               if (starting.length > maxLabels) {
